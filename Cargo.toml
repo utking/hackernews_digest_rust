@@ -1,0 +1,24 @@
+[package]
+name = "hackernews-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+argparse = "=0.2.2"
+chrono = "0.4.39"
+diesel = { version = "2.2.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+dotenvy = "0.15"
+lettre = "0.10"
+lettre_email = "0.9"
+regex = "1.11.1"
+reqwest = { version = "0.12", features = ["json"] }
+serde = {version = "~1.0", features = ["derive"]}
+serde_json = "~1.0"
+tokio = { version = "1", features = ["full"] }
+url = "2.5.4"
+libsqlite3-sys = { version = "~0.30.1", features = ["bundled"] }
+
+
+[profile.release]
+opt-level = 3
+strip = "debuginfo"
