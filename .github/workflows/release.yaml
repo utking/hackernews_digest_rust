@@ -22,4 +22,4 @@ jobs:
         with:
           TOOLCHAIN_VERSION: "1.78.0"
           RUSTTARGET: ${{ matrix.target }}
-          EXTRA_FILES: "README.md config.example.json"
+          EXTRA_FILES: "README.md config.json.example"
