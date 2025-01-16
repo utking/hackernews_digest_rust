@@ -1,6 +1,6 @@
 use crate::{
-    digest_to_html, digest_to_text, establish_connection, store_news_item, AppConfig, Digest,
-    JsonNewsItem, Sender,
+    digest_to_html, digest_to_text, establish_connection, schemas::prelude::run_migrations,
+    store_news_item, AppConfig, Digest, JsonNewsItem, Sender,
 };
 use diesel::SqliteConnection;
 use regex::Regex;
@@ -47,6 +47,12 @@ impl Fetcher {
     /// new news items or vacuuming the database. Return the number of items fetched.
     /// If digest is not empty, send an email with the digest to the email address in the config.
     pub async fn run(&self, op: &FetchOperation) -> Result<i32, Box<dyn std::error::Error>> {
+        let migration_conn = &mut establish_connection(&self.config.db_dsn);
+        match run_migrations(migration_conn) {
+            Ok(_) => {}
+            Err(e) => eprintln!("Error running migrations: {}", e),
+        }
+
         match op {
             FetchOperation::Fetch(reverse) => {
                 let digest = self.fetch(*reverse).await?;

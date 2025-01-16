@@ -35,8 +35,8 @@ impl CmdArgs {
 
             match ap.parse(args, &mut std::io::stdout(), &mut std::io::stderr()) {
                 Ok(()) => {}
-                Err(x) => {
-                    return Err(Error::new(std::io::ErrorKind::Other, x.to_string()));
+                Err(_) => {
+                    return Err(Error::from(std::io::ErrorKind::InvalidInput));
                 }
             }
         }
