@@ -117,19 +117,21 @@ impl Fetcher {
                 continue;
             }
 
-            // Apply filters
-            if reverse {
-                for filter in &self.filters {
-                    if !filter.is_match(&title) {
-                        digest.push(digest_item.clone());
-                        break;
+            if digest_item.news_title != "-" {
+                // Apply filters
+                if reverse {
+                    for filter in &self.filters {
+                        if !filter.is_match(&title) {
+                            digest.push(digest_item.clone());
+                            break;
+                        }
                     }
-                }
-            } else {
-                for filter in &self.filters {
-                    if filter.is_match(&title) {
-                        digest.push(digest_item.clone());
-                        break;
+                } else {
+                    for filter in &self.filters {
+                        if filter.is_match(&title) {
+                            digest.push(digest_item.clone());
+                            break;
+                        }
                     }
                 }
             }
