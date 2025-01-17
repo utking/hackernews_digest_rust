@@ -19,6 +19,8 @@ url = "2.5.4"
 libsqlite3-sys = { version = "~0.30.1", features = ["bundled"] }
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 
+[dev-dependencies]
+httpmock = "0.7.0-rc.1"
 
 [profile.release]
 opt-level = "z"
