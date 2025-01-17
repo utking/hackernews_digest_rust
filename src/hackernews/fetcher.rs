@@ -112,42 +112,60 @@ impl Fetcher {
         for id in ids_to_pull[0..ids_to_pull.len()].iter() {
             let news_item = &self.fetch_news_item(*id).await?;
             let digest_item = &news_item.as_digest_item();
-            let title = &digest_item.news_title.clone();
 
             // Skip blacklisted domains, but store the news item in the database
             if self.is_blacklisted(&digest_item.news_url) {
+                eprintln!("Skipping blacklisted domain: {}", digest_item.news_url);
                 store_news_item(digest_item, &mut conn)?;
                 continue;
             }
 
             // Skip items with missing URLs from the digest, but store them in the database
             if self.is_missing_url(&digest_item.news_url) {
+                eprintln!("Skipping item with missing URL: {}", digest_item.news_title);
                 store_news_item(digest_item, &mut conn)?;
                 continue;
             }
 
             // Apply filters
-            if reverse {
-                for filter in &self.filters {
-                    if !filter.is_match(&title) {
-                        digest.push(digest_item.clone());
-                        break;
-                    }
-                }
-            } else {
-                for filter in &self.filters {
-                    if filter.is_match(&title) {
-                        digest.push(digest_item.clone());
-                        break;
-                    }
-                }
+            if !self.keep_item(&digest_item.news_title.clone(), reverse) {
+                store_news_item(digest_item, &mut conn)?;
+                eprintln!("Skipping filtered item: {}", digest_item.news_title);
+                continue;
             }
+
+            digest.push(digest_item.clone());
         }
+
+        eprintln!("Storing {} news items in the database", digest.len());
 
         // Store the news items in the database
         crate::store_digest(&digest, &mut conn)?;
 
         Ok(digest)
+    }
+
+    /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
+    fn keep_item(&self, title: &String, reverse: bool) -> bool {
+        let mut keep: bool = false;
+        if reverse {
+            for filter in &self.filters {
+                if !filter.is_match(&title) {
+                    eprintln!("Keeping item for reverse: {}", title);
+                    keep = true;
+                    break;
+                }
+            }
+        } else {
+            for filter in &self.filters {
+                if filter.is_match(&title) {
+                    eprintln!("Keeping item: {}", title);
+                    keep = true;
+                    break;
+                }
+            }
+        }
+        keep
     }
 
     /// Vacuum the database - remove old news items
@@ -560,5 +578,85 @@ mod test {
         news_item5_mock.assert();
 
         assert_eq!(num_fetched, 1, "Fetched items count is wrong");
+    }
+
+    #[test]
+    /// Test filtering items based on the filters; use simple and regex filters
+    pub async fn test_filtering_items() {
+        let pulled_items = vec![
+            DigestItem {
+                news_title: "Rust is awesome".to_string(),
+                news_url: "https://example.com".to_string(),
+                created_at: 1700000000,
+                id: 1,
+            },
+            DigestItem {
+                news_title: "Rust is cool".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 2,
+            },
+            DigestItem {
+                news_title: "Rust is aweful".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 3,
+            },
+            DigestItem {
+                news_title: "Go is cool".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 4,
+            },
+            DigestItem {
+                news_title: "Dart is some thing".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 5,
+            },
+        ];
+        let mut config = crate::AppConfig {
+            api_base_url: "https://localhost/v0".to_string(),
+            db_dsn: ":memory:".to_string(),
+            email_to: None,
+            filters: vec![
+                ItemFilter {
+                    value: "cool".to_string(),
+                    title: "PLs".to_string(),
+                },
+                ItemFilter {
+                    value: "awesome".to_string(),
+                    title: "PLs".to_string(),
+                },
+            ],
+            smtp: None,
+            purge_after_days: 7,
+            blacklisted_domains: vec![],
+        };
+        let fetcher = crate::Fetcher::new(&config);
+
+        assert_eq!(
+            pulled_items
+                .iter()
+                .filter(|i| fetcher.keep_item(&i.news_title, false))
+                .count(),
+            3,
+            "Filtering items agains mutiple simple filters failed",
+        );
+
+        config.filters = vec![ItemFilter {
+            value: "some\\b".to_string(),
+            title: "PLs".to_string(),
+        }];
+
+        let fetcher = crate::Fetcher::new(&config);
+        assert_eq!(
+            pulled_items
+                .iter()
+                .filter(|i| fetcher.keep_item(&i.news_title, false))
+                .count(),
+            2,
+            "Filtering items against a regex filter failed",
+        );
     }
 }
