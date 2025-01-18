@@ -6,6 +6,7 @@ use diesel::SqliteConnection;
 use regex::{Regex, RegexBuilder};
 use url::Url;
 
+#[derive(Debug, Clone)]
 pub enum FetchOperation {
     Fetch(bool),
     Vacuum,
@@ -109,20 +110,18 @@ impl Fetcher {
         let prefetched = self.prefetch().await?;
         let ids_to_pull = crate::get_ids_to_pull(prefetched, conn);
 
-        for id in ids_to_pull[0..ids_to_pull.len()].iter() {
-            let news_item = &self.fetch_news_item(*id).await?;
+        for id in ids_to_pull {
+            let news_item = &self.fetch_news_item(id).await?;
             let digest_item = &news_item.as_digest_item();
 
             // Skip blacklisted domains, but store the news item in the database
             if self.is_blacklisted(&digest_item.news_url) {
-                eprintln!("Skipping blacklisted domain: {}", digest_item.news_url);
                 store_news_item(digest_item, &mut conn)?;
                 continue;
             }
 
             // Skip items with missing URLs from the digest, but store them in the database
             if self.is_missing_url(&digest_item.news_url) {
-                eprintln!("Skipping item with missing URL: {}", digest_item.news_title);
                 store_news_item(digest_item, &mut conn)?;
                 continue;
             }
@@ -130,14 +129,11 @@ impl Fetcher {
             // Apply filters
             if !self.keep_item(&digest_item.news_title.clone(), reverse) {
                 store_news_item(digest_item, &mut conn)?;
-                eprintln!("Skipping filtered item: {}", digest_item.news_title);
                 continue;
             }
 
             digest.push(digest_item.clone());
         }
-
-        eprintln!("Storing {} news items in the database", digest.len());
 
         // Store the news items in the database
         crate::store_digest(&digest, &mut conn)?;
@@ -151,7 +147,6 @@ impl Fetcher {
         if reverse {
             for filter in &self.filters {
                 if !filter.is_match(&title) {
-                    eprintln!("Keeping item for reverse: {}", title);
                     keep = true;
                     break;
                 }
@@ -159,7 +154,6 @@ impl Fetcher {
         } else {
             for filter in &self.filters {
                 if filter.is_match(&title) {
-                    eprintln!("Keeping item: {}", title);
                     keep = true;
                     break;
                 }
@@ -225,7 +219,7 @@ impl Fetcher {
 
 #[cfg(test)]
 mod test {
-    use crate::{schemas::prelude::run_migrations, DigestItem, ItemFilter};
+    use crate::{schemas::prelude::run_migrations, AppConfig, DigestItem, ItemFilter};
     use tokio::test;
 
     #[test]
@@ -657,6 +651,114 @@ mod test {
                 .count(),
             2,
             "Filtering items against a regex filter failed",
+        );
+    }
+
+    #[test]
+    /// Test filtering items based on the filters; use simple and regex filters
+    pub async fn test_filter_config_from_str() {
+        let pulled_items = vec![
+            DigestItem {
+                news_title: "So You Want to Build Your Own Data Center".to_string(),
+                news_url: "https://example.com".to_string(),
+                created_at: 1700000000,
+                id: 1,
+            },
+            DigestItem {
+                news_title: "Maze Generation: Recursive Division (2011)".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 2,
+            },
+            DigestItem {
+                news_title: "Swedish Exports of Ball Bearings".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 3,
+            },
+            DigestItem {
+                news_title: "Obelisks".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 4,
+            },
+            DigestItem {
+                news_title: "Bluesky accounts add 10k followers per day".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 5,
+            },
+        ];
+        let config = AppConfig::from_str(
+            r#"{
+                "api_base_url": "https://hacker-news.firebaseio.com/v0",
+                "purge_after_days": 720,
+                "db_dsn": "hackernews_db.sqlite",
+                "blacklisted_domains": [
+                    "www.businessinsider.com",
+                    "www.nytimes.com",
+                    "en.wikipedia.org",
+                    "twitter.com",
+                    "www.wsj.com",
+                    "www.cnbc.com",
+                    "seekingalpha.com",
+                    "www.washingtonpost.com",
+                    "www.bloomberg.com",
+                    "www.ft.com",
+                    "fortune.com"
+                ],
+                "filters": [
+                    {"title": "IDE", "value": "\\bzed\\b,\\b(vs|studio)\\s?code\\b,\\bvim\\b,neovim,\\bide\\b"},
+                    {"title": "JavaScript", "value": "\\bjs\\b,(ecma|java).*script,\\bnode(\\.?js)?\\b,\\bnpm\\b"},
+                    {"title": "Covid", "value": "\\bcovid,\\bdelta\\b,vaccin"},
+                    {"title": "SQL", "value": "sql,database"},
+                    {"title": "Languages", "value": "\\bgo(lang)?\\b,\\brust\\b,\\bphp\\b,\\bmarkdown\\b,crystal,carbon\\b,pattern"},
+                    {"title": "FreeStuff", "value": "\\bfree\\b"},
+                    {"title": "HardwareVendors", "value": "dell"},
+                    {"title": "GraphQL", "value": "graphql"},
+                    {"title": "API", "value": "api\\b"},
+                    {"title": "Misc", "value": "toolbox\\b,framework\\b,\\bsdk\\b,\\bui\\b,\\barchitect"},
+                    {"title": "Hackers", "value": "\\bcve-,\\bhack,\\bpassw,\\bsecuri,\\bvulner,\\bbot\\b,\\bbotnet,owasp"},
+                    {"title": "Development", "value": "development,\\bweb.?socket,gdb"},
+                    {"title": "Css", "value": "\\bcss\\b,\\bstyle\\b"},
+                    {"title": "Linux", "value": "\\blinux\\b,ubuntu,debian,centos,\\bgnu\\b,\\bopen[-\\s]?source\\b,bpf\\b,tcp,ssh"},
+                    {
+                        "title": "Services",
+                        "value": "docker,haproxy,cassandra,elasticsearch,rabbitmq,nginx,k8s,\\brke,\\brancher,kubernetes,postfix,https,apache,github,\\bgit\\b"
+                    },
+                    {
+                        "title": "FAANG",
+                        "value": "google,apple,\\bmeta\\b,facebook,\\bfb\\b,microsoft,\\bms\\b,netflix,whatsapp,amazon,\\baws\\b"
+                    },
+                    {"title": "SRE", "value": "\\bsre\\b,devops,resiliency,recovery,reliability"},
+                    {"title": "Vue", "value": "\\bvue(\\.?js)?\\b"},
+                    {"title": "Books", "value": "pdf"},
+                    {"title": "Primers", "value": "primer\\b"},
+                    {"title": "Awesome", "value": "awesome\\b"},
+                    {"title": "AppNews", "value": "\\bapp\\b"},
+                    {"title": "Python", "value": "\\bpython"},
+                    {"title": "Problem", "value": "version,problem,debug,issues?\\b"},
+                    {"title": "Releases", "value": "release,\\bannounc"},
+                    {"title": "CPU/GPU", "value": "\\bintel\\b,\\bamd\\b"},
+                    {"title": "ComputerScience", "value": "\\bcs-?[1-9],\\balgor"},
+                    {"title": "Illinois", "value": "chicago,illinois"},
+                    {"title": "Deals and Discounts", "value": "black\\s*friday,\\bdeals?\\b,discount,coupon"}
+                ],
+                "email_to": ""
+            }
+            "#).unwrap();
+        let fetcher = crate::Fetcher::new(&config);
+
+        assert_eq!(fetcher.config.filters.len(), 29, "Filters count is wrong");
+        assert_eq!(fetcher.filters.len(), 105, "Parsed filters count is wrong");
+
+        assert_eq!(
+            pulled_items
+                .iter()
+                .filter(|i| fetcher.keep_item(&i.news_title, false))
+                .count(),
+            0,
+            "Filtering items agains mutiple simple filters failed",
         );
     }
 }

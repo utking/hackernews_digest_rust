@@ -52,7 +52,7 @@ impl CmdArgs {
         if self.vacuum {
             FetchOperation::Vacuum
         } else {
-            FetchOperation::Fetch(!self.reverse)
+            FetchOperation::Fetch(self.reverse)
         }
     }
 }

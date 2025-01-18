@@ -32,4 +32,11 @@ impl AppConfig {
 
         Ok(config)
     }
+
+    #[allow(dead_code)]
+    pub fn from_str(contents: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let config: AppConfig = serde_json::from_str(&contents)?;
+
+        Ok(config)
+    }
 }
