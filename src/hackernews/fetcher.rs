@@ -1,6 +1,6 @@
 use crate::{
-    digest_to_html, digest_to_text, establish_connection, schemas::prelude::run_migrations,
-    store_news_item, AppConfig, Digest, JsonNewsItem, Sender,
+    establish_connection, schemas::prelude::run_migrations, store_news_item, AppConfig, Digest,
+    DigestSender, DummySender, JsonNewsItem, SmtpSender,
 };
 use diesel::SqliteConnection;
 use regex::{Regex, RegexBuilder};
@@ -68,21 +68,30 @@ impl Fetcher {
                             if !send_to.is_empty() {
                                 match self.config.smtp {
                                     Some(ref smtp_config) => {
-                                        let sender = Sender::new(smtp_config);
-                                        let text_body = digest_to_text(&digest);
-                                        let html_body = digest_to_html(&digest);
+                                        let sender = SmtpSender::new(smtp_config);
                                         sender
-                                            .send_email(
+                                            .send_digest(
+                                                &digest,
                                                 &send_to,
                                                 smtp_config.subject.as_str(),
-                                                &text_body,
-                                                &html_body,
                                             )
                                             .await?;
                                     }
                                     None => {}
                                 }
+                            } else {
+                                let dummy_sender = DummySender {};
+                                dummy_sender.send_digest(&digest, "", "").await?;
                             }
+                        }
+                        None => {}
+                    }
+                    match self.config.telegram {
+                        Some(ref telegram_config) => {
+                            let sender = crate::TelegramSender::new(telegram_config);
+                            sender
+                                .send_digest(&digest, &telegram_config.chat_id, "")
+                                .await?;
                         }
                         None => {}
                     }
@@ -253,6 +262,7 @@ mod test {
                 title: "PLs".to_string(),
             }],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -293,6 +303,7 @@ mod test {
                 title: "PLs".to_string(),
             }],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -330,6 +341,7 @@ mod test {
                 title: "PLs".to_string(),
             }],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -375,6 +387,7 @@ mod test {
                 title: "PLs".to_string(),
             }],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -427,6 +440,7 @@ mod test {
                 title: "PLs".to_string(),
             }],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -495,6 +509,7 @@ mod test {
                 title: "PLs".to_string(),
             }],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -559,6 +574,7 @@ mod test {
                 title: "PLs".to_string(),
             }],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };
@@ -624,6 +640,7 @@ mod test {
                 },
             ],
             smtp: None,
+            telegram: None,
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };

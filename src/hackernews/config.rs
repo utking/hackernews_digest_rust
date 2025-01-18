@@ -15,6 +15,12 @@ pub struct SmtpConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TelegramConfig {
+    pub token: String,
+    pub chat_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AppConfig {
     pub api_base_url: String,
     pub blacklisted_domains: Vec<String>,
@@ -23,6 +29,7 @@ pub struct AppConfig {
     pub filters: Vec<ItemFilter>,
     pub purge_after_days: u64,
     pub smtp: Option<SmtpConfig>,
+    pub telegram: Option<TelegramConfig>,
 }
 
 impl AppConfig {
