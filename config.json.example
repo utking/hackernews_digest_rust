@@ -37,5 +37,9 @@
     "password": null,
     "use_tls": true,
     "use_ssl": false
+  },
+  "telegram": {
+    "chat_id": "123456",
+    "token": "6236243:cvbsSghsdFbskm-sfgJNiunidvJ"
   }
 }
