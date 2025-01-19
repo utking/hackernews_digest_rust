@@ -4,4 +4,5 @@
         "editor.selectionClipboard": false,
         "editor.rulers": [80]
     },
+    "editor.selectionClipboard": false
 }
