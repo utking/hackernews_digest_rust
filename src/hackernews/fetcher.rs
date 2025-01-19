@@ -1,7 +1,6 @@
 use crate::{
-    establish_connection, schemas::prelude::run_migrations, store_news_item, AppConfig, Digest,
-    DigestItem, DigestSender, DummySender, JsonNewsItem, SenderType, SmtpSender, TelegramSender,
-    API_BASE_URL,
+    establish_connection, schemas::prelude::run_migrations, AppConfig, Digest, DigestItem,
+    DigestSender, DummySender, JsonNewsItem, SenderType, SmtpSender, TelegramSender, API_BASE_URL,
 };
 use diesel::SqliteConnection;
 use regex::{Regex, RegexBuilder};
@@ -104,6 +103,7 @@ impl Fetcher {
         mut conn: &mut SqliteConnection,
     ) -> Result<Digest, Box<dyn std::error::Error>> {
         let mut digest: Digest = Vec::new();
+        let mut skipped: Digest = Vec::new();
 
         let prefetched = self.prefetch().await?;
         let ids_to_pull = crate::get_ids_to_pull(prefetched, conn);
@@ -114,27 +114,29 @@ impl Fetcher {
 
             // Skip blacklisted domains, but store the news item in the database
             if self.is_blacklisted(&digest_item.news_url) {
-                store_news_item(digest_item, &mut conn)?;
+                skipped.push(digest_item.clone());
                 continue;
             }
 
             // Skip items with missing URLs from the digest, but store them in the database
             if self.is_missing_url(&digest_item.news_url) {
-                store_news_item(digest_item, &mut conn)?;
+                skipped.push(digest_item.clone());
                 continue;
             }
 
             // Apply filters
             if !self.keep_item(&digest_item.news_title.clone(), reverse) {
-                store_news_item(digest_item, &mut conn)?;
+                skipped.push(digest_item.clone());
                 continue;
             }
 
             digest.push(digest_item.clone());
         }
 
+        // Store the skipped news items in the database
+        crate::store_news_items(&skipped, &mut conn)?;
         // Store the news items in the database
-        crate::store_digest(&digest, &mut conn)?;
+        crate::store_news_items(&digest, &mut conn)?;
 
         Ok(self.deduplicate(&digest))
     }
@@ -444,7 +446,7 @@ mod test {
         // apply migrations
         run_migrations(&mut conn).unwrap();
         // store the pulled items in the database to have IDs to pull
-        crate::store_digest(&pulled_items, &mut conn).unwrap();
+        crate::store_news_items(&pulled_items, &mut conn).unwrap();
 
         let prefetched = fetcher.prefetch().await.unwrap();
         prefetch_mock.assert();

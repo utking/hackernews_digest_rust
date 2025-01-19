@@ -60,7 +60,7 @@ pub fn get_ids_to_pull(prefetched_ids: Vec<i32>, conn: &mut SqliteConnection) ->
 }
 
 /// Store the news items in the database
-pub fn store_digest(
+pub fn store_news_items(
     digest: &Vec<DigestItem>,
     conn: &mut SqliteConnection,
 ) -> Result<(), diesel::result::Error> {
@@ -68,20 +68,6 @@ pub fn store_digest(
 
     diesel::insert_into(news_items)
         .values(digest)
-        .execute(conn)?;
-
-    Ok(())
-}
-
-/// Store one news item in the database
-pub fn store_news_item(
-    news_item: &DigestItem,
-    conn: &mut SqliteConnection,
-) -> Result<(), diesel::result::Error> {
-    use crate::schemas::prelude::news_items::dsl::*;
-
-    diesel::insert_into(news_items)
-        .values(news_item)
         .execute(conn)?;
 
     Ok(())
