@@ -1,6 +1,6 @@
 use crate::{
     establish_connection, schemas::prelude::run_migrations, store_news_item, AppConfig, Digest,
-    DigestSender, DummySender, JsonNewsItem, SmtpSender,
+    DigestSender, DummySender, JsonNewsItem, SenderType, SmtpSender, TelegramSender, API_BASE_URL,
 };
 use diesel::SqliteConnection;
 use regex::{Regex, RegexBuilder};
@@ -14,6 +14,7 @@ pub enum FetchOperation {
 
 pub struct Fetcher {
     pub config: AppConfig,
+    api_base_url: String,
     filters: Vec<Regex>,
 }
 
@@ -43,6 +44,16 @@ impl Fetcher {
         Self {
             config: config.clone(),
             filters,
+            api_base_url: API_BASE_URL.to_string(),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn with_base_url(&self, base_url: String) -> Self {
+        Self {
+            config: self.config.clone(),
+            filters: self.filters.clone(),
+            api_base_url: base_url,
         }
     }
 
@@ -63,37 +74,14 @@ impl Fetcher {
                 // Send an email with the digest if it's not empty
                 if digest.len() > 0 {
                     // send the digest to the email address in the config, if given
-                    match self.config.email_to {
-                        Some(ref send_to) => {
-                            if !send_to.is_empty() {
-                                match self.config.smtp {
-                                    Some(ref smtp_config) => {
-                                        let sender = SmtpSender::new(smtp_config);
-                                        sender
-                                            .send_digest(
-                                                &digest,
-                                                &send_to,
-                                                smtp_config.subject.as_str(),
-                                            )
-                                            .await?;
-                                    }
-                                    None => {}
-                                }
-                            } else {
-                                let dummy_sender = DummySender {};
-                                dummy_sender.send_digest(&digest, "", "").await?;
-                            }
+                    match self.config.get_sender() {
+                        SenderType::Email(config) => {
+                            SmtpSender::new(&config).send_digest(&digest).await?
                         }
-                        None => {}
-                    }
-                    match self.config.telegram {
-                        Some(ref telegram_config) => {
-                            let sender = crate::TelegramSender::new(telegram_config);
-                            sender
-                                .send_digest(&digest, &telegram_config.chat_id, "")
-                                .await?;
+                        SenderType::Telegram(config) => {
+                            TelegramSender::new(&config).send_digest(&digest).await?
                         }
-                        None => {}
+                        SenderType::Console => DummySender {}.send_digest(&digest).await?,
                     }
                 }
                 Ok(digest.len() as i32)
@@ -184,7 +172,7 @@ impl Fetcher {
 
     /// Fetch the top stories' IDs from the API
     async fn prefetch(&self) -> Result<Vec<i32>, Box<dyn std::error::Error>> {
-        let result = reqwest::get(format!("{}/topstories.json", self.config.api_base_url))
+        let result = reqwest::get(format!("{}/topstories.json", self.api_base_url))
             .await?
             .json::<Vec<i32>>()
             .await?;
@@ -194,7 +182,7 @@ impl Fetcher {
 
     /// Fetch a single news item by its ID
     async fn fetch_news_item(&self, id: i32) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
-        let result = reqwest::get(format!("{}/item/{id}.json", self.config.api_base_url))
+        let result = reqwest::get(format!("{}/item/{id}.json", self.api_base_url))
             .await?
             .json::<JsonNewsItem>()
             .await?;
@@ -254,9 +242,7 @@ mod test {
             },
         ];
         let config = crate::AppConfig {
-            api_base_url: "https://localhost/v0".to_string(),
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
                 title: "PLs".to_string(),
@@ -295,9 +281,7 @@ mod test {
             },
         ];
         let config = crate::AppConfig {
-            api_base_url: "https://localhost/v0".to_string(),
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
                 title: "PLs".to_string(),
@@ -333,9 +317,7 @@ mod test {
         });
 
         let config = crate::AppConfig {
-            api_base_url: expected_addr_str,
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
                 title: "PLs".to_string(),
@@ -345,7 +327,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
 
         let ids = fetcher.prefetch().await.unwrap();
         prefetch_mock.assert();
@@ -379,9 +361,7 @@ mod test {
         });
 
         let config = crate::AppConfig {
-            api_base_url: expected_addr_str,
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
                 title: "PLs".to_string(),
@@ -392,7 +372,7 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
         let item = fetcher.fetch_news_item(111).await.unwrap();
         prefetch_mock.assert();
         let digest_item = item.as_digest_item();
@@ -432,9 +412,7 @@ mod test {
                 .body("[1, 2, 3, 4, 5]");
         });
         let config = crate::AppConfig {
-            api_base_url: expected_addr_str,
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
                 title: "PLs".to_string(),
@@ -444,7 +422,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
 
         let mut conn = crate::establish_connection(&config.db_dsn);
         // apply migrations
@@ -501,9 +479,7 @@ mod test {
         });
 
         let config = crate::AppConfig {
-            api_base_url: expected_addr_str,
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![ItemFilter {
                 value: ".*".to_string(), // match all
                 title: "PLs".to_string(),
@@ -514,7 +490,7 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
         let op = crate::FetchOperation::Fetch(false);
         let num_fetched = fetcher.run(&op).await.unwrap();
 
@@ -566,9 +542,7 @@ mod test {
         });
 
         let config = crate::AppConfig {
-            api_base_url: expected_addr_str,
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![ItemFilter {
                 value: "item".to_string(),
                 title: "PLs".to_string(),
@@ -579,7 +553,7 @@ mod test {
             blacklisted_domains: vec![],
         };
 
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
         let op = crate::FetchOperation::Fetch(true);
         let num_fetched = fetcher.run(&op).await.unwrap();
 
@@ -626,9 +600,7 @@ mod test {
             },
         ];
         let mut config = crate::AppConfig {
-            api_base_url: "https://localhost/v0".to_string(),
             db_dsn: ":memory:".to_string(),
-            email_to: None,
             filters: vec![
                 ItemFilter {
                     value: "cool".to_string(),
@@ -708,7 +680,6 @@ mod test {
         ];
         let config = AppConfig::from_str(
             r#"{
-                "api_base_url": "https://hacker-news.firebaseio.com/v0",
                 "purge_after_days": 720,
                 "db_dsn": "hackernews_db.sqlite",
                 "blacklisted_domains": [

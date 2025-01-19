@@ -5,13 +5,11 @@ use lettre::{SmtpTransport, Transport};
 use teloxide::utils::markdown;
 
 pub trait DigestSender {
-    async fn send_digest(
-        &self,
-        digest: &Vec<DigestItem>,
-        send_to: &str,
-        subject: &str,
-    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn send_digest(&self, digest: &Vec<DigestItem>)
+        -> Result<(), Box<dyn std::error::Error>>;
 }
+
+pub struct DummySender {}
 
 pub struct SmtpSender {
     config: SmtpConfig,
@@ -42,15 +40,13 @@ impl DigestSender for SmtpSender {
     async fn send_digest(
         &self,
         digest: &Vec<DigestItem>,
-        send_to: &str,
-        subject: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let text_body = digest_to_text(digest);
         let html_body = digest_to_html(digest);
         let email = lettre::Message::builder()
             .from(self.config.from.parse()?)
-            .to(send_to.parse()?)
-            .subject(subject)
+            .to(self.config.to.parse()?)
+            .subject(self.config.subject.clone())
             .multipart(
                 MultiPart::mixed().multipart(
                     MultiPart::alternative()
@@ -76,14 +72,10 @@ impl DigestSender for SmtpSender {
     }
 }
 
-pub struct DummySender {}
-
 impl DigestSender for DummySender {
     async fn send_digest(
         &self,
         digest: &Vec<DigestItem>,
-        _send_to: &str,
-        _subject: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut body = String::from("Hi!\n\n");
 
@@ -97,6 +89,40 @@ impl DigestSender for DummySender {
         body.push_str(format!("\nGenerated: {}", formatted_now()).as_str());
 
         println!("{}", body);
+
+        Ok(())
+    }
+}
+
+impl DigestSender for TelegramSender {
+    async fn send_digest(
+        &self,
+        digest: &Vec<DigestItem>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use teloxide::prelude::*;
+
+        let bot = Bot::new(&self.config.token);
+
+        for item in digest {
+            let body = format!(
+                "*[{}]({})*",
+                markdown::escape(&item.news_title),
+                markdown::escape_link_url(&item.news_url),
+            );
+
+            match bot
+                .send_message(self.config.chat_id.clone(), body)
+                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                .send()
+                .await
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("Could not send message: {:?}", e);
+                    return Err(Box::new(e));
+                }
+            }
+        }
 
         Ok(())
     }
@@ -138,40 +164,4 @@ pub fn digest_to_text(digest: &Vec<DigestItem>) -> String {
 
 fn formatted_now() -> String {
     chrono::Local::now().to_rfc2822()
-}
-
-impl DigestSender for TelegramSender {
-    async fn send_digest(
-        &self,
-        digest: &Vec<DigestItem>,
-        send_to: &str,
-        _subject: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        use teloxide::prelude::*;
-
-        let bot = Bot::new(&self.config.token);
-
-        for item in digest {
-            let body = format!(
-                "*[{}]({})*",
-                markdown::escape(&item.news_title),
-                markdown::escape_link_url(&item.news_url),
-            );
-
-            match bot
-                .send_message(send_to.to_string(), body.as_str())
-                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .send()
-                .await
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("Could not send message: {:?}", e);
-                    return Err(Box::new(e));
-                }
-            }
-        }
-
-        Ok(())
-    }
 }

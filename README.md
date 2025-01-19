@@ -10,9 +10,15 @@ There is a default config-file name - `config.json`. Note that it can be overwri
 
 To create a config file, copy `config.example.json` to `config.json` (or any other name that seems right for you) and adjust what you think should be adjusted. For `sqlite3`, the Database DSN string must contain the name of the DB file.
 
-#### Output to console
+#### Digest output
 
-Set "EmailTo" to an empty string if you don't want to send emails but simply want to print out the digest to the console. Setting "EmailTo" to a non-empty string but having "Smtp.Host" empty, you prevent any output.
+There are 3 options to output the collected digest
+
+* Telegram bot - use the corresponding `telegram` part of the config. Each news item will be a separate message in the configured channel.
+* Email - use the `smtp` part. All news items will come listed in one email.
+* CLI Console - remove both - `smtp` and `telegram` sections of the config. The output will look like the plain-text version of the email.
+
+If you have both `smtp` and `telegram` sections in your config file, `smtp` will be used of the two.
 
 ### Arguments
 

@@ -1,5 +1,4 @@
 {
-  "api_base_url": "https://hacker-news.firebaseio.com/v0",
   "purge_after_days": 30,
   "db_dsn": "db.sqlite3",
   "blacklisted_domains": [
@@ -27,11 +26,11 @@
     {"title": "Python", "value": "\\bpython"},
     {"title": "CPU/GPU", "value": "\\bintel\\b,\\bamd\\b"}
   ],
-  "email_to": "to@example.com",
   "smtp": {
     "host": "localhost",
     "port": 1025,
     "subject": "HackerNews Digest",
+    "to": "to@example.com",
     "from": "HackerNews Digest <hackernews-no-reply@example.com>",
     "username": null,
     "password": null,
