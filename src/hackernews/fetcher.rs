@@ -1,6 +1,7 @@
 use crate::{
     establish_connection, schemas::prelude::run_migrations, store_news_item, AppConfig, Digest,
-    DigestSender, DummySender, JsonNewsItem, SenderType, SmtpSender, TelegramSender, API_BASE_URL,
+    DigestItem, DigestSender, DummySender, JsonNewsItem, SenderType, SmtpSender, TelegramSender,
+    API_BASE_URL,
 };
 use diesel::SqliteConnection;
 use regex::{Regex, RegexBuilder};
@@ -135,7 +136,7 @@ impl Fetcher {
         // Store the news items in the database
         crate::store_digest(&digest, &mut conn)?;
 
-        Ok(digest)
+        Ok(self.deduplicate(&digest))
     }
 
     /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
@@ -211,6 +212,21 @@ impl Fetcher {
         }
 
         false
+    }
+
+    /// De-duplicate the fetched items and return the unique items. URL is used as the key.
+    fn deduplicate(&self, items: &Vec<DigestItem>) -> Vec<DigestItem> {
+        let mut unique_items: Vec<DigestItem> = Vec::new();
+        let mut urls: Vec<String> = Vec::new();
+
+        for item in items {
+            if !urls.contains(&item.news_url.clone()) {
+                urls.push(item.news_url.clone());
+                unique_items.push(item.clone());
+            }
+        }
+
+        unique_items
     }
 }
 
@@ -747,6 +763,63 @@ mod test {
                 .count(),
             0,
             "Filtering items agains mutiple simple filters failed",
+        );
+    }
+
+    /// Test the deduplication of the fetched items
+    #[test]
+    pub async fn test_deduplication() {
+        let pulled_items = vec![
+            DigestItem {
+                news_title: "Item #1".to_string(),
+                news_url: "https://example.com".to_string(),
+                created_at: 1700000000,
+                id: 1,
+            },
+            DigestItem {
+                news_title: "Item #2".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 2,
+            },
+            DigestItem {
+                news_title: "Some other name for item #1".to_string(),
+                news_url: "https://example.com".to_string(),
+                created_at: 1700000000,
+                id: 3,
+            },
+            DigestItem {
+                news_title: "Item #2 duplicate".to_string(),
+                news_url: "https://example.org".to_string(),
+                created_at: 1700000000,
+                id: 4,
+            },
+        ];
+        let config = crate::AppConfig {
+            db_dsn: ":memory:".to_string(),
+            filters: vec![ItemFilter {
+                value: "rust".to_string(),
+                title: "PLs".to_string(),
+            }],
+            smtp: None,
+            telegram: None,
+            purge_after_days: 7,
+            blacklisted_domains: vec![],
+        };
+        let fetcher = crate::Fetcher::new(&config);
+
+        let deduplicated = fetcher.deduplicate(&pulled_items);
+        assert_eq!(deduplicated.len(), 2, "Deduplication failed");
+
+        assert_eq!(deduplicated[0].id, 1, "Deduplication failed");
+        assert_eq!(deduplicated[1].id, 2, "Deduplication failed");
+        assert_eq!(
+            deduplicated[0].news_title, "Item #1",
+            "Deduplication failed"
+        );
+        assert_eq!(
+            deduplicated[1].news_title, "Item #2",
+            "Deduplication failed"
         );
     }
 }
