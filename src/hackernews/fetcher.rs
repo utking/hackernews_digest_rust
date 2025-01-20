@@ -1,10 +1,4 @@
-use crate::{
-    establish_connection, schemas::prelude::run_migrations, AppConfig, Digest, DigestItem,
-    DigestSender, DummySender, JsonNewsItem, SenderType, SmtpSender, TelegramSender, API_BASE_URL,
-};
-use diesel::SqliteConnection;
-use regex::{Regex, RegexBuilder};
-use url::Url;
+use crate::*;
 
 #[derive(Debug, Clone)]
 pub enum FetchOperation {
@@ -19,31 +13,13 @@ pub struct Fetcher {
 }
 
 impl Fetcher {
+    #[must_use]
     /// Create a new fetcher with the given configuration
     pub fn new(config: &AppConfig) -> Self {
         // for filter in &config.filters, split the "value" field by comma and store in a vector
-        let string_filters: Vec<String> = config
-            .filters
-            .iter()
-            .map(|f| f.value.split(',').collect::<Vec<&str>>())
-            .flatten()
-            .map(|s| s.to_string())
-            .collect();
-
-        let mut filters: Vec<Regex> = Vec::new();
-        for filter in string_filters {
-            match RegexBuilder::new(&filter.to_lowercase())
-                .case_insensitive(true)
-                .build()
-            {
-                Ok(re) => filters.push(re),
-                Err(e) => eprintln!("Error creating filter: {}", e),
-            }
-        }
-
         Self {
             config: config.clone(),
-            filters,
+            filters: Filters::compile(config.filters.clone()),
             api_base_url: API_BASE_URL.to_string(),
         }
     }
@@ -74,15 +50,7 @@ impl Fetcher {
                 // Send an email with the digest if it's not empty
                 if digest.len() > 0 {
                     // send the digest to the email address in the config, if given
-                    match self.config.get_sender() {
-                        SenderType::Email(config) => {
-                            SmtpSender::new(&config).send_digest(&digest).await?
-                        }
-                        SenderType::Telegram(config) => {
-                            TelegramSender::new(&config).send_digest(&digest).await?
-                        }
-                        SenderType::Console => DummySender {}.send_digest(&digest).await?,
-                    }
+                    self.config.get_sender().send_digest(&digest).await?;
                 }
                 Ok(digest.len() as i32)
             }

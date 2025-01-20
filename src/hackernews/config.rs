@@ -1,8 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-use crate::ItemFilter;
-
-pub const API_BASE_URL: &str = "https://hacker-news.firebaseio.com/v0";
+use crate::*;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SmtpConfig {
@@ -15,12 +11,6 @@ pub struct SmtpConfig {
     pub use_ssl: bool,
     pub use_tls: bool,
     pub username: String,
-}
-
-pub enum SenderType {
-    Email(SmtpConfig),
-    Telegram(TelegramConfig),
-    Console,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -54,13 +44,13 @@ impl AppConfig {
         Ok(config)
     }
 
-    pub fn get_sender(&self) -> SenderType {
+    pub fn get_sender(&self) -> Sender {
         if let Some(config) = &self.smtp {
-            SenderType::Email(config.clone())
+            Sender::Smtp(SmtpSender::new(config))
         } else if let Some(config) = &self.telegram {
-            SenderType::Telegram(config.clone())
+            Sender::Telegram(TelegramSender::new(config))
         } else {
-            SenderType::Console
+            Sender::Dummy(DummySender {})
         }
     }
 }
