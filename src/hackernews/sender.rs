@@ -4,6 +4,25 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{SmtpTransport, Transport};
 use teloxide::utils::markdown;
 
+pub enum Sender {
+    Dummy(DummySender),
+    Smtp(SmtpSender),
+    Telegram(TelegramSender),
+}
+
+impl Sender {
+    pub async fn send_digest(
+        &self,
+        digest: &Vec<DigestItem>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            Sender::Dummy(sender) => sender.send_digest(digest).await,
+            Sender::Smtp(sender) => sender.send_digest(digest).await,
+            Sender::Telegram(sender) => sender.send_digest(digest).await,
+        }
+    }
+}
+
 pub trait DigestSender {
     async fn send_digest(&self, digest: &Vec<DigestItem>)
         -> Result<(), Box<dyn std::error::Error>>;
