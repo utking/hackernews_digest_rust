@@ -22,12 +22,10 @@ jobs:
     - run: rustup install 1.84.0
     - run: rustup default 1.84.0
     - run: cargo build --release
+    - run: tar -czvf hackernews-rust.tar.gz -C target/release/hackernews-rust README.md config.json.example
     - name: Release Artifact
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          ./target/release/hackernews-rust
-          README.md
-          config.json.example
+        files: hackernews-rust.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
