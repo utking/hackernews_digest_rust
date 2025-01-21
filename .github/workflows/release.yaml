@@ -1,0 +1,35 @@
+on: 
+  release:
+    types: [created]
+permissions:
+  contents: write
+  packages: write
+
+env:
+  # Disable incremental compilation for faster from-scratch builds
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  release:
+    name: release ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - run: rustup install 1.84.0
+    - run: rustup default 1.84.0
+    - run: cargo build --release
+    - run: |
+        tar -czvf ${{ github.workspace }}/hackernews-rust.tar.gz \
+          ${{ github.workspace }}/target/release/hackernews-rust \
+          ${{ github.workspace }}/README.md \
+          ${{ github.workspace }}/config.json.example
+    - name: Release Artifact
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ github.workspace }}/hackernews-rust.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
