@@ -11,7 +11,7 @@ env:
 
 jobs:
   release:
-    name: release ${{ matrix.target }}
+    name: release ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -24,9 +24,9 @@ jobs:
     - run: cargo build --release
     - uses: actions/upload-artifact@v4
       with:
-        name: hackernews-{{ matrix.target }}
+        name: hackernews-{{ matrix.os }}
         if-no-files-found: error
         path: |
-          hackernews_digest_rust
+          ./target/release/hackernews_digest_rust
           README.md
           config.json.example
