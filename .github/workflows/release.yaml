@@ -27,6 +27,6 @@ jobs:
         name: hackernews-{{ matrix.target }}
         if-no-files-found: error
         path: |
-          target/release/hackernews-rust
+          hackernews_digest_rust
           README.md
           config.json.example
