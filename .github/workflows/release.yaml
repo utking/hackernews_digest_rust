@@ -22,11 +22,12 @@ jobs:
     - run: rustup install 1.84.0
     - run: rustup default 1.84.0
     - run: cargo build --release
-    - uses: actions/upload-artifact@v4
+    - name: Release Artifact
+      uses: softprops/action-gh-release@v2
       with:
-        name: hackernews-${{ matrix.os }}
-        if-no-files-found: error
-        path: |
+        files: |
           ./target/release/hackernews-rust
           README.md
           config.json.example
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
