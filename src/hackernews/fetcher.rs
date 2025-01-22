@@ -68,7 +68,7 @@ impl Fetcher {
     async fn fetch(
         &self,
         reverse: bool,
-        mut conn: &mut SqliteConnection,
+        mut conn: &mut AnyConnection,
     ) -> Result<Digest, Box<dyn std::error::Error>> {
         let mut digest: Digest = Vec::new();
         let mut skipped: Digest = Vec::new();
@@ -131,7 +131,7 @@ impl Fetcher {
     }
 
     /// Vacuum the database - remove old news items
-    async fn vacuum(&self, conn: &mut SqliteConnection) -> Result<i32, Box<dyn std::error::Error>> {
+    async fn vacuum(&self, conn: &mut AnyConnection) -> Result<i32, Box<dyn std::error::Error>> {
         let num_deleted = crate::vacuum(self.config.purge_after_days as i32, conn)?;
 
         Ok(num_deleted as i32)

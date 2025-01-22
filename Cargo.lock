@@ -583,9 +583,14 @@ version = "2.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf1bedf64cdb9643204a36dd15b19a6ce8e7aa7f7b105868e9f1fad5ffa7d12"
 dependencies = [
+ "bitflags 2.8.0",
+ "byteorder",
  "diesel_derives",
  "libsqlite3-sys",
+ "mysqlclient-sys",
+ "percent-encoding",
  "time 0.3.37",
+ "url",
 ]
 
 [[package]]
@@ -1837,6 +1842,16 @@ dependencies = [
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "mysqlclient-sys"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bbb9b017b98c4cde5802998113e182eecc1ebce8d47e9ea1697b9a623d53870"
+dependencies = [
+ "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
