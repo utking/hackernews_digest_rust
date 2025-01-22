@@ -1,7 +1,12 @@
+use crate::schemas::prelude::news_items;
 use diesel::prelude::*;
 use dotenvy::dotenv;
 
-use crate::schemas::prelude::news_items;
+#[derive(diesel::MultiConnection)]
+pub enum AnyConnection {
+    Mysql(diesel::MysqlConnection),
+    Sqlite(diesel::SqliteConnection),
+}
 
 /// DB Model: A news item that has been fetched
 #[derive(Debug, Clone, Queryable, Selectable, PartialEq, Insertable)]
@@ -19,17 +24,34 @@ pub struct DigestItemID {
     pub id: i32,
 }
 
-pub fn establish_connection(database_url: &String) -> SqliteConnection {
+pub fn establish_connection(database_url: &String) -> AnyConnection {
+    dotenv().ok();
+
+    if database_url.starts_with("mysql") {
+        AnyConnection::Mysql(establish_mysql_conn(database_url))
+    } else {
+        AnyConnection::Sqlite(establish_sqlite_conn(database_url))
+    }
+}
+
+pub fn establish_sqlite_conn(database_url: &String) -> SqliteConnection {
     dotenv().ok();
 
     SqliteConnection::establish(&database_url)
         .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }
 
+pub fn establish_mysql_conn(database_url: &String) -> MysqlConnection {
+    dotenv().ok();
+
+    MysqlConnection::establish(&database_url)
+        .unwrap_or_else(|s| panic!("Error connecting to {} with {}", database_url, s))
+}
+
 /// Vacuum the database - remove news items which created_at is older than `expire_after_days`
 pub fn vacuum(
     expire_after_days: i32,
-    conn: &mut SqliteConnection,
+    conn: &mut AnyConnection,
 ) -> Result<usize, diesel::result::Error> {
     use crate::schemas::prelude::news_items::dsl::*;
 
@@ -42,7 +64,7 @@ pub fn vacuum(
 }
 
 /// Get IDs of the news items whose IDs are not in the database yet
-pub fn get_ids_to_pull(prefetched_ids: Vec<i32>, conn: &mut SqliteConnection) -> Vec<i32> {
+pub fn get_ids_to_pull(prefetched_ids: Vec<i32>, conn: &mut AnyConnection) -> Vec<i32> {
     use crate::schemas::prelude::news_items::dsl::{id, news_items};
 
     let existing_ids: Vec<i32> = news_items
@@ -62,13 +84,23 @@ pub fn get_ids_to_pull(prefetched_ids: Vec<i32>, conn: &mut SqliteConnection) ->
 /// Store the news items in the database
 pub fn store_news_items(
     digest: &Vec<DigestItem>,
-    conn: &mut SqliteConnection,
+    conn: &mut AnyConnection,
 ) -> Result<(), diesel::result::Error> {
     use crate::schemas::prelude::news_items::dsl::*;
 
-    diesel::insert_into(news_items)
-        .values(digest)
-        .execute(conn)?;
+    if let AnyConnection::Mysql(ref mut conn) = conn {
+        diesel::insert_into(news_items)
+            .values(digest)
+            .execute(conn)?;
+    } else if let AnyConnection::Sqlite(ref mut conn) = conn {
+        diesel::insert_into(news_items)
+            .values(digest)
+            .execute(conn)?;
+    } else {
+        return Err(diesel::result::Error::QueryBuilderError(
+            "Unsupported connection type".into(),
+        ));
+    }
 
     Ok(())
 }

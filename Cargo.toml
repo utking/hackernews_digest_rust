@@ -1,13 +1,13 @@
 [package]
 name = "hackernews-rust"
-version = "1.0.4"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.84.0"
 
 [dependencies]
 argparse = "=0.2.2"
 chrono = "0.4.39"
-diesel = { version = "2.2.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+diesel = { version = "2.2.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "mysql"] }
 dotenvy = "0.15"
 lettre = "0.10"
 lettre_email = "0.9"

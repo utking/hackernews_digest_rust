@@ -16,7 +16,6 @@ pub mod prelude {
     pub use super::filter::*;
     pub use super::repository::*;
     pub use super::sender::*;
-    pub use diesel::SqliteConnection;
     pub use regex::{Regex, RegexBuilder};
     pub use serde::{Deserialize, Serialize};
     pub use url::Url;

@@ -1,0 +1,10 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: supersecret
+      MYSQL_DATABASE: news_db
+      MYSQL_USER: digest
+      MYSQL_PASSWORD: somesecret
+    ports:
+      - "3306:3306"
