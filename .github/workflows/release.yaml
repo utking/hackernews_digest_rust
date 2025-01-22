@@ -21,7 +21,6 @@ jobs:
     - uses: actions/checkout@v4
     - run: rustup install 1.84.0
     - run: rustup default 1.84.0
-    - run: apt install libmysqlclient-dev
     - run: cargo build --release
     - run: |
         tar -czvf ${{ github.workspace }}/hackernews-rust.tar.gz \
