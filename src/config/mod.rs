@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{Deserialize, DummySender, ItemFilter, Sender, Serialize, SmtpSender, TelegramSender};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SmtpConfig {
@@ -39,7 +39,7 @@ impl AppConfig {
 
     #[allow(dead_code)]
     pub fn from_str(contents: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let config: AppConfig = serde_json::from_str(&contents)?;
+        let config: AppConfig = serde_json::from_str(contents)?;
 
         Ok(config)
     }

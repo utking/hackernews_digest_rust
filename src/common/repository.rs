@@ -34,18 +34,18 @@ pub fn establish_connection(database_url: &String) -> AnyConnection {
     }
 }
 
-pub fn establish_sqlite_conn(database_url: &String) -> SqliteConnection {
+pub fn establish_sqlite_conn(database_url: &str) -> SqliteConnection {
     dotenv().ok();
 
-    SqliteConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+    SqliteConnection::establish(database_url)
+        .unwrap_or_else(|e| panic!("Error connecting to {database_url} with {e}"))
 }
 
-pub fn establish_mysql_conn(database_url: &String) -> MysqlConnection {
+pub fn establish_mysql_conn(database_url: &str) -> MysqlConnection {
     dotenv().ok();
 
-    MysqlConnection::establish(&database_url)
-        .unwrap_or_else(|s| panic!("Error connecting to {} with {}", database_url, s))
+    MysqlConnection::establish(database_url)
+        .unwrap_or_else(|e| panic!("Error connecting to {database_url} with {e}"))
 }
 
 /// Vacuum the database - remove news items which created_at is older than `expire_after_days`
@@ -75,7 +75,7 @@ pub fn get_ids_to_pull(prefetched_ids: Vec<i32>, conn: &mut AnyConnection) -> Ve
 
     let ids_to_pull: Vec<i32> = prefetched_ids
         .into_iter()
-        .filter(|item_id| !existing_ids.contains(&(*item_id as i32)))
+        .filter(|item_id| !existing_ids.contains(item_id))
         .collect();
 
     ids_to_pull

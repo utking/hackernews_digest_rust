@@ -1,9 +1,6 @@
 use crate::DigestItem;
 use serde::Deserialize;
 
-/// List of news items that have been fetched since the last fetch
-pub type Digest = Vec<DigestItem>;
-
 /// A news item that has been fetched from the API
 #[derive(Debug, Deserialize)]
 pub struct JsonNewsItem {

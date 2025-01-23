@@ -1,21 +1,21 @@
-use crate::*;
+use crate::{
+    common, config, establish_connection, run_migrations, AnyConnection, DigestItem, Fetch,
+    Filters, JsonNewsItem, Regex, Url,
+};
+use common::FetchOperation;
+use config::AppConfig;
 
-#[derive(Debug, Clone)]
-pub enum FetchOperation {
-    Fetch(bool),
-    Vacuum,
-}
-
-pub struct Fetcher {
+pub struct HNFetcher {
     pub config: AppConfig,
     api_base_url: String,
     filters: Vec<Regex>,
 }
 
-impl Fetcher {
+impl HNFetcher {
     #[must_use]
     /// Create a new fetcher with the given configuration
-    pub fn new(config: &AppConfig) -> Self {
+    pub fn new(config: &AppConfig) -> HNFetcher {
+        const API_BASE_URL: &str = "https://hacker-news.firebaseio.com/v0";
         // for filter in &config.filters, split the "value" field by comma and store in a vector
         Self {
             config: config.clone(),
@@ -33,31 +33,6 @@ impl Fetcher {
         }
     }
 
-    /// Run the fetcher with the given operation. The operation can be either fetching
-    /// new news items or vacuuming the database. Return the number of items fetched.
-    /// If digest is not empty, send an email with the digest to the email address in the config.
-    pub async fn run(&self, op: &FetchOperation) -> Result<i32, Box<dyn std::error::Error>> {
-        let mut conn = establish_connection(&self.config.db_dsn);
-        let conn_arg = &mut conn;
-        match run_migrations(conn_arg) {
-            Ok(_) => {}
-            Err(e) => eprintln!("Error running migrations: {}", e),
-        }
-
-        match op {
-            FetchOperation::Fetch(reverse) => {
-                let digest = self.fetch(*reverse, conn_arg).await?;
-                // Send an email with the digest if it's not empty
-                if digest.len() > 0 {
-                    // send the digest to the email address in the config, if given
-                    self.config.get_sender().send_digest(&digest).await?;
-                }
-                Ok(digest.len() as i32)
-            }
-            FetchOperation::Vacuum => self.vacuum(conn_arg).await,
-        }
-    }
-
     /// Fetch not previously fetched news items from the API. For that, we need to:
     /// 1. Fetch the top stories' IDs from the API
     /// 2. Fetch each news item by its ID if it wasn't previously fetched; existing
@@ -69,12 +44,12 @@ impl Fetcher {
         &self,
         reverse: bool,
         mut conn: &mut AnyConnection,
-    ) -> Result<Digest, Box<dyn std::error::Error>> {
-        let mut digest: Digest = Vec::new();
-        let mut skipped: Digest = Vec::new();
+    ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
+        let mut digest = Vec::new();
+        let mut skipped = Vec::new();
 
         let prefetched = self.prefetch().await?;
-        let ids_to_pull = crate::get_ids_to_pull(prefetched, conn);
+        let ids_to_pull = crate::get_ids_to_pull(prefetched, &mut conn);
 
         for id in ids_to_pull {
             let news_item = &self.fetch_news_item(id).await?;
@@ -110,18 +85,18 @@ impl Fetcher {
     }
 
     /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
-    fn keep_item(&self, title: &String, reverse: bool) -> bool {
+    fn keep_item(&self, title: &str, reverse: bool) -> bool {
         let mut keep: bool = false;
         if reverse {
             for filter in &self.filters {
-                if !filter.is_match(&title) {
+                if !filter.is_match(title) {
                     keep = true;
                     break;
                 }
             }
         } else {
             for filter in &self.filters {
-                if filter.is_match(&title) {
+                if filter.is_match(title) {
                     keep = true;
                     break;
                 }
@@ -162,7 +137,7 @@ impl Fetcher {
     }
 
     /// Check if a URL's domain is in the blacklist
-    fn is_blacklisted(&self, url: &String) -> bool {
+    fn is_blacklisted(&self, url: &str) -> bool {
         if url.is_empty() {
             return false;
         }
@@ -200,9 +175,37 @@ impl Fetcher {
     }
 }
 
+impl Fetch for HNFetcher {
+    /// Run the fetcher with the given operation. The operation can be either fetching
+    /// new news items or vacuuming the database. Return the number of items fetched.
+    /// If digest is not empty, send an email with the digest to the email address in the config.
+    async fn run(&self, op: &FetchOperation) -> Result<i32, Box<dyn std::error::Error>> {
+        let mut conn = establish_connection(&self.config.db_dsn);
+        let conn_arg = &mut conn;
+        match run_migrations(conn_arg) {
+            Ok(()) => {}
+            Err(e) => eprintln!("Error running migrations: {e}"),
+        }
+
+        match op {
+            FetchOperation::Fetch(reverse) => {
+                let digest = self.fetch(*reverse, conn_arg).await?;
+                // Send an email with the digest if it's not empty
+                if !digest.is_empty() {
+                    // send the digest to the email address in the config, if given
+                    self.config.get_sender().send_digest(&digest).await?;
+                }
+                Ok(digest.len() as i32)
+            }
+            FetchOperation::Vacuum => self.vacuum(conn_arg).await,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::{schemas::prelude::run_migrations, AppConfig, DigestItem, ItemFilter};
+    use super::{common::FetchOperation, config::AppConfig, Fetch, HNFetcher};
+    use crate::{schemas::prelude::run_migrations, DigestItem, ItemFilter};
     use tokio::test;
 
     #[test]
@@ -227,7 +230,7 @@ mod test {
                 id: 3,
             },
         ];
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
@@ -238,7 +241,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::HNFetcher::new(&config);
 
         assert_eq!(
             pulled_items
@@ -266,7 +269,7 @@ mod test {
                 id: 2,
             },
         ];
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
@@ -277,7 +280,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::HNFetcher::new(&config);
 
         assert_eq!(
             pulled_items
@@ -302,7 +305,7 @@ mod test {
                 .body("[1, 2, 3, 4, 5]");
         });
 
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
@@ -313,7 +316,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
+        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
 
         let ids = fetcher.prefetch().await.unwrap();
         prefetch_mock.assert();
@@ -346,7 +349,7 @@ mod test {
                 );
         });
 
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
@@ -358,7 +361,7 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
+        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
         let item = fetcher.fetch_news_item(111).await.unwrap();
         prefetch_mock.assert();
         let digest_item = item.as_digest_item();
@@ -397,7 +400,7 @@ mod test {
                 .header("content-type", "application/json")
                 .body("[1, 2, 3, 4, 5]");
         });
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
@@ -408,7 +411,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
+        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
 
         let mut conn = crate::establish_connection(&config.db_dsn);
         // apply migrations
@@ -464,7 +467,7 @@ mod test {
                 );
         });
 
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: ".*".to_string(), // match all
@@ -476,8 +479,8 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
-        let op = crate::FetchOperation::Fetch(false);
+        let fetcher = HNFetcher::new(&config).with_base_url(expected_addr_str);
+        let op = FetchOperation::Fetch(false);
         let num_fetched = fetcher.run(&op).await.unwrap();
 
         prefetch_mock.assert();
@@ -527,7 +530,7 @@ mod test {
                 );
         });
 
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: "item".to_string(),
@@ -539,8 +542,8 @@ mod test {
             blacklisted_domains: vec![],
         };
 
-        let fetcher = crate::Fetcher::new(&config).with_base_url(expected_addr_str);
-        let op = crate::FetchOperation::Fetch(true);
+        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
+        let op = FetchOperation::Fetch(true);
         let num_fetched = fetcher.run(&op).await.unwrap();
 
         prefetch_mock.assert();
@@ -585,7 +588,7 @@ mod test {
                 id: 5,
             },
         ];
-        let mut config = crate::AppConfig {
+        let mut config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![
                 ItemFilter {
@@ -602,7 +605,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::HNFetcher::new(&config);
 
         assert_eq!(
             pulled_items
@@ -618,7 +621,7 @@ mod test {
             title: "PLs".to_string(),
         }];
 
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::HNFetcher::new(&config);
         assert_eq!(
             pulled_items
                 .iter()
@@ -721,7 +724,7 @@ mod test {
                 "email_to": ""
             }
             "#).unwrap();
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::HNFetcher::new(&config);
 
         assert_eq!(fetcher.config.filters.len(), 29, "Filters count is wrong");
         assert_eq!(fetcher.filters.len(), 105, "Parsed filters count is wrong");
@@ -765,7 +768,7 @@ mod test {
                 id: 4,
             },
         ];
-        let config = crate::AppConfig {
+        let config = AppConfig {
             db_dsn: ":memory:".to_string(),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
@@ -776,7 +779,7 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };
-        let fetcher = crate::Fetcher::new(&config);
+        let fetcher = crate::HNFetcher::new(&config);
 
         let deduplicated = fetcher.deduplicate(&pulled_items);
         assert_eq!(deduplicated.len(), 2, "Deduplication failed");

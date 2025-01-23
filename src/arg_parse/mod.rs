@@ -1,6 +1,6 @@
 use std::io::Error;
 
-use crate::FetchOperation;
+use crate::common::FetchOperation;
 
 #[derive(Debug, Clone)]
 pub struct CmdArgs {
