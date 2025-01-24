@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run the vacuum operation separately if requested
     if args.vacuum {
-        let num_deleted = Vacuum::new(&config).run().await?;
+        let num_deleted = Vacuum::new(&config).run()?;
         println!("Vacuumed {num_deleted} items");
     }
 
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Run the fetchers
+    // Run the fetchers if there are any
     for fetcher in fetchers {
         let fetched_items = match fetcher {
             FetcherType::HNFetcher(f) => f.run(args.reverse).await?,

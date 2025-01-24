@@ -18,7 +18,7 @@ impl HNFetcher {
         const API_BASE_URL: &str = "https://hacker-news.firebaseio.com/v0";
         Self {
             config: config.clone(),
-            filters: Filters::compile(config.filters.clone()),
+            filters: Filters::compile(&config.filters),
             api_base_url: API_BASE_URL.to_string(),
         }
     }
@@ -35,7 +35,7 @@ impl HNFetcher {
     /// Fetch not previously fetched news items from the API. For that, we need to:
     /// 1. Fetch the top stories' IDs from the API
     /// 2. Fetch each news item by its ID if it wasn't previously fetched; existing
-    ///   news items' IDs are stored in the database
+    ///    news items' IDs are stored in the database
     /// 3. Apply filters to each news item
     /// 4. Store the news items in the database
     /// 5. Return the digest of new items fetched

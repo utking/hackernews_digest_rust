@@ -11,7 +11,7 @@ pub struct JsonNewsItem {
 }
 
 impl JsonNewsItem {
-    /// Convert a JsonNewsItem to a DigestItem for storage
+    /// Convert to a `DigestItem` for storage
     pub fn as_digest_item(&self) -> DigestItem {
         let mut item = DigestItem {
             id: self.id as i32,

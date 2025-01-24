@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{Deserialize, Regex, RegexBuilder, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ItemFilter {
@@ -10,10 +10,10 @@ pub struct Filters {}
 
 impl Filters {
     #[must_use]
-    pub fn compile(filters: Vec<ItemFilter>) -> Vec<Regex> {
+    pub fn compile(filters: &[ItemFilter]) -> Vec<Regex> {
         let string_filters: Vec<String> = filters
             .iter()
-            .flat_map(|f| f.value.split(',').map(|s| s.to_string()))
+            .flat_map(|f| f.value.split(',').map(std::string::ToString::to_string))
             .collect();
 
         let mut filters: Vec<Regex> = Vec::new();

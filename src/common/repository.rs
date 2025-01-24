@@ -92,13 +92,13 @@ pub fn get_ids_to_pull(prefetched_ids: Vec<i32>, conn: &mut AnyConnection) -> Ve
 /// Store the news items in the database. It's the same feed generally,
 /// so we just give it a source
 pub fn store_news_items(
-    digest: &Vec<DigestItem>,
+    digest: &[DigestItem],
     conn: &mut AnyConnection,
 ) -> Result<(), diesel::result::Error> {
     store_feed_items("hackernews", digest, conn)
 }
 
-/// Store the RSS items in the database. The feed_source is part of the primary key
+/// Store the RSS items in the database. The `feed_source` is part of the primary key
 /// so we can store multiple feeds in the same table
 pub fn store_feed_items(
     feed_source: &str,

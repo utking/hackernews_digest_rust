@@ -30,7 +30,7 @@ impl FeedItem {
             .unwrap_or_default();
         Self {
             id,
-            guid: guid,
+            guid,
             title: item.title().unwrap_or("").to_string(),
             description: item.description().unwrap_or("").to_string(),
             created_at: 0,

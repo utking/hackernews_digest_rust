@@ -12,9 +12,9 @@ impl Vacuum {
         }
     }
 
-    pub async fn run(&self) -> Result<usize, Box<dyn std::error::Error>> {
+    pub fn run(&self) -> Result<usize, Box<dyn std::error::Error>> {
         let mut conn = establish_connection(&self.config.db_dsn);
-        let num_deleted = self.vacuum(&mut conn).await?;
+        let num_deleted = self.vacuum(&mut conn)?;
 
         match run_migrations(&mut conn) {
             Ok(()) => {}
@@ -24,7 +24,7 @@ impl Vacuum {
         Ok(num_deleted)
     }
 
-    async fn vacuum(&self, conn: &mut AnyConnection) -> Result<usize, Box<dyn std::error::Error>> {
+    fn vacuum(&self, conn: &mut AnyConnection) -> Result<usize, Box<dyn std::error::Error>> {
         let num_deleted = crate::vacuum(self.config.purge_after_days, conn)?;
 
         Ok(num_deleted)

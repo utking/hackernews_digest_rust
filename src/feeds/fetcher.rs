@@ -14,12 +14,12 @@ pub struct RssFetcher {
 }
 
 impl RssFetcher {
-    /// Create a new HabrFetcher
+    /// Create a new fetcher
     #[must_use]
     pub fn new(config: &AppConfig) -> RssFetcher {
         Self {
             config: config.clone(),
-            filters: Filters::compile(config.filters.clone()),
+            filters: Filters::compile(&config.filters),
         }
     }
 

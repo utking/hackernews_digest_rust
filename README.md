@@ -26,9 +26,10 @@ There are 3 options to output the collected digest
 
 If you have both `smtp` and `telegram` sections in your config file, `smtp` will be used of the two.
 
-### Arguments
+### CLI flags and parameters
 
 * -r|--reverse - to reverse the filtering
 * -v|--vacuum - to remove old records, without running news updates (retention period is set set in the config file)
 * -c|--config - to set a config file
+* -f|--feeds-only - to pull RSS feeds only
 * -h|--help - to show this help
