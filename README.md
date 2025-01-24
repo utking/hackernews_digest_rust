@@ -14,7 +14,7 @@ To create a config file, copy `config.example.json` to `config.json` (or any oth
 Database connection agreement:
 
 * For `sqlite3`, the Database DSN string must contain the name of the DB file (i.e., `./news.db`).
-* For `mysql`, the DNS must be in the form of `mysql://user:password@host:port/db-name`. See https://docs.diesel.rs/2.1.x/diesel/mysql/struct.MysqlConnection.html for additional options. (!) libmysqlclient must be installed in the systemd for Mysql backend to work.
+* For `mysql`, the DSN must be in the form of `mysql://user:password@host:port/db-name`. See https://docs.diesel.rs/2.1.x/diesel/mysql/struct.MysqlConnection.html for additional options. (!) libmysqlclient must be installed in the systemd for Mysql backend to work.
 
 #### Digest output
 
