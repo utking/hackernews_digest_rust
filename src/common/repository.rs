@@ -32,7 +32,7 @@ pub struct DigestItemID {
     pub id: i32,
 }
 
-pub fn establish_connection(database_url: &String) -> AnyConnection {
+pub fn establish_connection(database_url: &str) -> AnyConnection {
     dotenv().ok();
 
     if database_url.starts_with("mysql") {
@@ -56,9 +56,9 @@ pub fn establish_mysql_conn(database_url: &str) -> MysqlConnection {
         .unwrap_or_else(|e| panic!("Error connecting to {database_url} with {e}"))
 }
 
-/// Vacuum the database - remove news items which created_at is older than `expire_after_days`
+/// Vacuum the database - remove news items which `created_at` is older than `expire_after_days`
 pub fn vacuum(
-    expire_after_days: i32,
+    expire_after_days: usize,
     conn: &mut AnyConnection,
 ) -> Result<usize, diesel::result::Error> {
     use crate::schemas::prelude::rss_items::dsl::*;
@@ -95,14 +95,14 @@ pub fn store_news_items(
     digest: &Vec<DigestItem>,
     conn: &mut AnyConnection,
 ) -> Result<(), diesel::result::Error> {
-    store_feed_items(String::from("hackernews"), digest, conn)
+    store_feed_items("hackernews", digest, conn)
 }
 
 /// Store the RSS items in the database. The feed_source is part of the primary key
 /// so we can store multiple feeds in the same table
 pub fn store_feed_items(
-    feed_source: String,
-    digest: &Vec<DigestItem>,
+    feed_source: &str,
+    digest: &[DigestItem],
     conn: &mut AnyConnection,
 ) -> Result<(), diesel::result::Error> {
     use crate::schemas::prelude::rss_items::dsl::*;
@@ -113,7 +113,7 @@ pub fn store_feed_items(
         .iter()
         .map(|item| FeedItem {
             id: item.id,
-            source: feed_source.clone(),
+            source: feed_source.to_string(),
             created_at: current_timestamp as i32,
         })
         .collect();

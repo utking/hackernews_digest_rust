@@ -9,7 +9,7 @@ pub enum FetcherType {
 }
 
 pub trait Fetch {
-    async fn run(&self, reverse: bool) -> Result<i32, Box<dyn std::error::Error>>;
+    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>>;
 }
 
 /// De-duplicate the fetched items and return the unique items. URL is used as the key.
@@ -25,6 +25,11 @@ pub fn deduplicate(items: &Vec<DigestItem>) -> Vec<DigestItem> {
     }
 
     unique_items
+}
+
+/// Check if a URL is missing or empty in the digest item
+pub fn is_missing_url(item_url: &String) -> bool {
+    item_url.is_empty() || item_url == "-"
 }
 
 pub mod prelude {

@@ -19,11 +19,11 @@ impl FeedItem {
             .collect();
         let guid = match item.guid() {
             Some(g) => g.value().to_string(),
-            None => "".to_string(),
+            None => String::new(),
         };
         let id = guid
-            .trim_end_matches("/")
-            .split("/")
+            .trim_end_matches('/')
+            .split('/')
             .last()
             .unwrap_or_default()
             .parse()

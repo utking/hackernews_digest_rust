@@ -30,11 +30,7 @@ impl RssFetcher {
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let content = reqwest::get(source_url).await?.bytes().await?;
         let channel = Channel::read_from(&content[..])?;
-        let news_items: Vec<FeedItem> = channel
-            .items()
-            .iter()
-            .map(|item| FeedItem::from(item))
-            .collect();
+        let news_items: Vec<FeedItem> = channel.items().iter().map(FeedItem::from).collect();
 
         let mut items = Vec::new();
         for item in news_items {
@@ -73,13 +69,13 @@ impl RssFetcher {
         }
 
         // Store the news items in the database
-        crate::store_feed_items(source.name.clone(), &digest, &mut conn)?;
+        crate::store_feed_items(&source.name, &digest, &mut conn)?;
 
         Ok(digest)
     }
 
     /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
-    fn keep_item(&self, title: &String, reverse: bool) -> bool {
+    fn keep_item(&self, title: &str, reverse: bool) -> bool {
         let keep: bool = reverse;
         for filter in &self.filters {
             if filter.is_match(title) {
@@ -91,7 +87,7 @@ impl RssFetcher {
 }
 
 impl Fetch for RssFetcher {
-    async fn run(&self, reverse: bool) -> Result<i32, Box<dyn std::error::Error>> {
+    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
         let mut conn = establish_connection(&self.config.db_dsn);
         let conn_arg = &mut conn;
         match run_migrations(conn_arg) {
@@ -100,7 +96,7 @@ impl Fetch for RssFetcher {
         }
 
         let mut total_fetched = 0;
-        for source in self.config.rss_sources.clone().unwrap_or(vec![]) {
+        for source in self.config.rss_sources.clone().unwrap_or_default() {
             let digest = self.fetch(&source, reverse, conn_arg).await?;
             // Send an email with the digest if it's not empty
             if !digest.is_empty() {
@@ -109,7 +105,7 @@ impl Fetch for RssFetcher {
                 total_fetched += digest.len();
             }
         }
-        Ok(total_fetched as i32)
+        Ok(total_fetched)
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::{
-    common::deduplicate, config, establish_connection, run_migrations, AnyConnection, DigestItem,
-    Fetch, Filters, JsonNewsItem, Regex, Url,
+    common::{deduplicate, is_missing_url},
+    config, establish_connection, run_migrations, AnyConnection, DigestItem, Fetch, Filters,
+    JsonNewsItem, Regex, Url,
 };
 use config::AppConfig;
 
@@ -65,7 +66,7 @@ impl HNFetcher {
             }
 
             // Skip items with missing URLs from the digest, but store them in the database
-            if self.is_missing_url(&digest_item.news_url) {
+            if is_missing_url(&digest_item.news_url) {
                 skipped.push(DigestItem {
                     news_title: String::from("-"),
                     news_url: String::from("-"),
@@ -103,7 +104,7 @@ impl HNFetcher {
     }
 
     /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
-    fn keep_item(&self, title: &String, reverse: bool) -> bool {
+    fn keep_item(&self, title: &str, reverse: bool) -> bool {
         let keep: bool = reverse;
         for filter in &self.filters {
             if filter.is_match(title) {
@@ -111,11 +112,6 @@ impl HNFetcher {
             }
         }
         keep
-    }
-
-    /// Check if a URL is missing or empty in the digest item
-    fn is_missing_url(&self, item_url: &String) -> bool {
-        item_url.is_empty() || item_url == "-"
     }
 
     /// Fetch the top stories' IDs from the API
@@ -166,7 +162,7 @@ impl Fetch for HNFetcher {
     /// Run the fetcher with the given operation. The operation can be either fetching
     /// new news items or vacuuming the database. Return the number of items fetched.
     /// If digest is not empty, send an email with the digest to the email address in the config.
-    async fn run(&self, reverse: bool) -> Result<i32, Box<dyn std::error::Error>> {
+    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
         let mut conn = establish_connection(&self.config.db_dsn);
         let conn_arg = &mut conn;
         match run_migrations(conn_arg) {
@@ -180,14 +176,18 @@ impl Fetch for HNFetcher {
             // send the digest to the email address in the config, if given
             self.config.get_sender().send_digest(&digest).await?;
         }
-        Ok(digest.len() as i32)
+        Ok(digest.len())
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::{config::AppConfig, Fetch, HNFetcher};
-    use crate::{common::deduplicate, schemas::prelude::run_migrations, DigestItem, ItemFilter};
+    use crate::{
+        common::{deduplicate, is_missing_url},
+        schemas::prelude::run_migrations,
+        DigestItem, ItemFilter,
+    };
     use tokio::test;
 
     #[test]
@@ -212,24 +212,11 @@ mod test {
                 id: 3,
             },
         ];
-        let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
-            filters: vec![ItemFilter {
-                value: "rust".to_string(),
-                title: "PLs".to_string(),
-            }],
-            smtp: None,
-            telegram: None,
-            rss_sources: None,
-            purge_after_days: 7,
-            blacklisted_domains: vec![String::from("example.com")],
-        };
-        let fetcher = crate::HNFetcher::new(&config);
 
         assert_eq!(
             pulled_items
                 .iter()
-                .filter(|i| fetcher.is_missing_url(&i.news_url))
+                .filter(|i| is_missing_url(&i.news_url))
                 .count(),
             2,
             "Missing URL check failed",

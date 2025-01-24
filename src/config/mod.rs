@@ -30,7 +30,7 @@ pub struct AppConfig {
     pub blacklisted_domains: Vec<String>,
     pub db_dsn: String,
     pub filters: Vec<ItemFilter>,
-    pub purge_after_days: u64,
+    pub purge_after_days: usize,
     pub smtp: Option<SmtpConfig>,
     pub telegram: Option<TelegramConfig>,
     pub rss_sources: Option<Vec<RssSource>>,
