@@ -174,7 +174,10 @@ impl Fetch for HNFetcher {
         // Send an email with the digest if it's not empty
         if !digest.is_empty() {
             // send the digest to the email address in the config, if given
-            self.config.get_sender().send_digest(&digest).await?;
+            self.config
+                .get_sender()
+                .send_digest("HackerNews", &digest)
+                .await?;
         }
         Ok(digest.len())
     }

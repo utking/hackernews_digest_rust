@@ -6,6 +6,7 @@ mod config;
 mod feeds;
 mod hackernews;
 mod schemas;
+mod sender;
 mod vacuum;
 
 use crate::hackernews::prelude::*;

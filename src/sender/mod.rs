@@ -14,18 +14,23 @@ pub enum Sender {
 impl Sender {
     pub async fn send_digest(
         &self,
+        subj: &str,
         digest: &[DigestItem],
     ) -> Result<(), Box<dyn std::error::Error>> {
         match self {
-            Sender::Dummy(sender) => sender.send_digest(digest).await,
-            Sender::Smtp(sender) => sender.send_digest(digest).await,
-            Sender::Telegram(sender) => sender.send_digest(digest).await,
+            Sender::Dummy(sender) => sender.send_digest(subj, digest).await,
+            Sender::Smtp(sender) => sender.send_digest(subj, digest).await,
+            Sender::Telegram(sender) => sender.send_digest(subj, digest).await,
         }
     }
 }
 
 pub trait DigestSender {
-    async fn send_digest(&self, digest: &[DigestItem]) -> Result<(), Box<dyn std::error::Error>>;
+    async fn send_digest(
+        &self,
+        subj: &str,
+        digest: &[DigestItem],
+    ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 pub struct DummySender {}
@@ -56,13 +61,17 @@ impl TelegramSender {
 }
 
 impl DigestSender for SmtpSender {
-    async fn send_digest(&self, digest: &[DigestItem]) -> Result<(), Box<dyn std::error::Error>> {
+    async fn send_digest(
+        &self,
+        subj: &str,
+        digest: &[DigestItem],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let text_body = digest_to_text(digest);
         let html_body = digest_to_html(digest);
         let email = lettre::Message::builder()
             .from(self.config.from.parse()?)
             .to(self.config.to.parse()?)
-            .subject(self.config.subject.clone())
+            .subject(format!("{subj} {}", self.config.subject))
             .multipart(
                 MultiPart::mixed().multipart(
                     MultiPart::alternative()
@@ -86,7 +95,11 @@ impl DigestSender for SmtpSender {
 }
 
 impl DigestSender for DummySender {
-    async fn send_digest(&self, digest: &[DigestItem]) -> Result<(), Box<dyn std::error::Error>> {
+    async fn send_digest(
+        &self,
+        _subj: &str,
+        digest: &[DigestItem],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut body = String::from("Hi!\n\n");
 
         for item in digest {
@@ -105,7 +118,11 @@ impl DigestSender for DummySender {
 }
 
 impl DigestSender for TelegramSender {
-    async fn send_digest(&self, digest: &[DigestItem]) -> Result<(), Box<dyn std::error::Error>> {
+    async fn send_digest(
+        &self,
+        _subj: &str,
+        digest: &[DigestItem],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use teloxide::prelude::*;
 
         let bot = Bot::new(&self.config.token);
