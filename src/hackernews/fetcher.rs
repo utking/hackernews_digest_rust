@@ -16,7 +16,6 @@ impl HNFetcher {
     /// Create a new fetcher with the given configuration
     pub fn new(config: &AppConfig) -> HNFetcher {
         const API_BASE_URL: &str = "https://hacker-news.firebaseio.com/v0";
-        // for filter in &config.filters, split the "value" field by comma and store in a vector
         Self {
             config: config.clone(),
             filters: Filters::compile(config.filters.clone()),
@@ -238,6 +237,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -277,6 +277,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -313,6 +314,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -357,6 +359,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -408,6 +411,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -475,6 +479,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
@@ -538,6 +543,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };
@@ -602,6 +608,7 @@ mod test {
             ],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };
@@ -776,6 +783,7 @@ mod test {
             }],
             smtp: None,
             telegram: None,
+            rss_sources: None,
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };

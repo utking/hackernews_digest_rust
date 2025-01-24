@@ -20,6 +20,12 @@ pub struct TelegramConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RssSource {
+    pub url: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AppConfig {
     pub blacklisted_domains: Vec<String>,
     pub db_dsn: String,
@@ -27,6 +33,7 @@ pub struct AppConfig {
     pub purge_after_days: u64,
     pub smtp: Option<SmtpConfig>,
     pub telegram: Option<TelegramConfig>,
+    pub rss_sources: Option<Vec<RssSource>>,
 }
 
 impl AppConfig {

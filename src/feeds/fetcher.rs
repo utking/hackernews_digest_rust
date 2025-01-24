@@ -8,39 +8,27 @@ use crate::{
 
 use super::prelude::FeedItem;
 
-pub struct HabrFetcher {
-    api_base_url: String,
+pub struct RssFetcher {
     config: AppConfig,
     filters: Vec<Regex>,
 }
 
-impl HabrFetcher {
+impl RssFetcher {
     /// Create a new HabrFetcher
     #[must_use]
-    pub fn new(config: &AppConfig) -> HabrFetcher {
-        const API_BASE_URL: &str = "https://habr.com/ru/rss/articles/?with_tags=true&limit=100";
-        // for filter in &config.filters, split the "value" field by comma and store in a vector
+    pub fn new(config: &AppConfig) -> RssFetcher {
         Self {
             config: config.clone(),
             filters: Filters::compile(config.filters.clone()),
-            api_base_url: API_BASE_URL.to_string(),
-        }
-    }
-
-    #[allow(dead_code)]
-    fn with_base_url(&self, base_url: String) -> Self {
-        Self {
-            config: self.config.clone(),
-            filters: self.filters.clone(),
-            api_base_url: base_url,
         }
     }
 
     async fn pull_feed_items(
         &self,
+        source_url: &str,
         reverse: bool,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
-        let content = reqwest::get(&self.api_base_url).await?.bytes().await?;
+        let content = reqwest::get(source_url).await?.bytes().await?;
         let channel = Channel::read_from(&content[..])?;
         let news_items: Vec<FeedItem> = channel
             .items()
@@ -66,13 +54,14 @@ impl HabrFetcher {
     /// Fetch the latest news from the Habr API
     async fn fetch(
         &self,
+        source_url: &str,
         reverse: bool,
-        mut conn: &mut AnyConnection,
+        mut _conn: &mut AnyConnection,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
-        let digest = self.pull_feed_items(reverse).await?;
+        let digest = self.pull_feed_items(source_url, reverse).await?;
 
         // Store the news items in the database
-        crate::store_news_items(&digest, &mut conn)?;
+        // crate::store_news_items(&digest, &mut conn)?;
 
         Ok(digest)
     }
@@ -105,7 +94,7 @@ impl HabrFetcher {
     }
 }
 
-impl Fetch for HabrFetcher {
+impl Fetch for RssFetcher {
     async fn run(&self, op: &FetchOperation) -> Result<i32, Box<dyn std::error::Error>> {
         let mut conn = establish_connection(&self.config.db_dsn);
         let conn_arg = &mut conn;
@@ -116,13 +105,17 @@ impl Fetch for HabrFetcher {
 
         match op {
             FetchOperation::Fetch(reverse) => {
-                let digest = self.fetch(*reverse, conn_arg).await?;
-                // Send an email with the digest if it's not empty
-                if !digest.is_empty() {
-                    // send the digest to the email address in the config, if given
-                    self.config.get_sender().send_digest(&digest).await?;
+                let mut total_fetched = 0;
+                for source in self.config.rss_sources.clone().unwrap_or(vec![]) {
+                    let digest = self.fetch(&source.url, *reverse, conn_arg).await?;
+                    // Send an email with the digest if it's not empty
+                    if !digest.is_empty() {
+                        // send the digest to the email address in the config, if given
+                        self.config.get_sender().send_digest(&digest).await?;
+                        total_fetched += digest.len();
+                    }
                 }
-                Ok(digest.len() as i32)
+                Ok(total_fetched as i32)
             }
             FetchOperation::Vacuum => self.vacuum(conn_arg).await,
         }
