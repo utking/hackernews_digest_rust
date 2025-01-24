@@ -14,12 +14,13 @@ impl Vacuum {
 
     pub fn run(&self) -> Result<usize, Box<dyn std::error::Error>> {
         let mut conn = establish_connection(&self.config.db_dsn);
-        let num_deleted = self.vacuum(&mut conn)?;
 
         match run_migrations(&mut conn) {
             Ok(()) => {}
             Err(e) => eprintln!("Error running migrations: {e}"),
         }
+
+        let num_deleted = self.vacuum(&mut conn)?;
 
         Ok(num_deleted)
     }
