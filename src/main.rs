@@ -25,6 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.vacuum {
         let num_deleted = Vacuum::new(&config).run()?;
         println!("Vacuumed {num_deleted} items");
+        return Ok(());
     }
 
     // Create a list of fetchers to run
