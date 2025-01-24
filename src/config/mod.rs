@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{Deserialize, DummySender, ItemFilter, Sender, Serialize, SmtpSender, TelegramSender};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SmtpConfig {
@@ -20,13 +20,20 @@ pub struct TelegramConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RssSource {
+    pub url: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AppConfig {
     pub blacklisted_domains: Vec<String>,
     pub db_dsn: String,
     pub filters: Vec<ItemFilter>,
-    pub purge_after_days: u64,
+    pub purge_after_days: usize,
     pub smtp: Option<SmtpConfig>,
     pub telegram: Option<TelegramConfig>,
+    pub rss_sources: Option<Vec<RssSource>>,
 }
 
 impl AppConfig {
@@ -39,7 +46,7 @@ impl AppConfig {
 
     #[allow(dead_code)]
     pub fn from_str(contents: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let config: AppConfig = serde_json::from_str(&contents)?;
+        let config: AppConfig = serde_json::from_str(contents)?;
 
         Ok(config)
     }

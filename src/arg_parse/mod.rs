@@ -1,12 +1,11 @@
 use std::io::Error;
 
-use crate::FetchOperation;
-
 #[derive(Debug, Clone)]
 pub struct CmdArgs {
     pub config: String,
     pub reverse: bool,
     pub vacuum: bool,
+    pub feeds_only: Option<bool>,
 }
 
 impl CmdArgs {
@@ -14,6 +13,7 @@ impl CmdArgs {
         let mut config = String::from("./config.json");
         let mut reverse = false;
         let mut vacuum = false;
+        let mut feeds_only = false;
         {
             let mut ap = argparse::ArgumentParser::new();
             ap.set_description("Hackernews CLI");
@@ -32,6 +32,11 @@ impl CmdArgs {
                 argparse::StoreTrue,
                 "Vacuum the database",
             );
+            ap.refer(&mut feeds_only).add_option(
+                &["-f", "--feeds-only"],
+                argparse::StoreTrue,
+                "Fetch only feeds",
+            );
 
             match ap.parse(args, &mut std::io::stdout(), &mut std::io::stderr()) {
                 Ok(()) => {}
@@ -45,14 +50,7 @@ impl CmdArgs {
             config,
             reverse,
             vacuum,
+            feeds_only: Some(feeds_only),
         })
-    }
-
-    pub fn get_action(&self) -> FetchOperation {
-        if self.vacuum {
-            FetchOperation::Vacuum
-        } else {
-            FetchOperation::Fetch(self.reverse)
-        }
     }
 }

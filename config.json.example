@@ -26,6 +26,16 @@
     {"title": "Python", "value": "\\bpython"},
     {"title": "CPU/GPU", "value": "\\bintel\\b,\\bamd\\b"}
   ],
+  "rss_sources": [
+    {
+      "url": "https://habr.com/ru/rss/articles/?with_tags=true&limit=10",
+      "name": "Habr Ru"
+    },
+    {
+      "url": "https://habr.com/en/rss/articles/?with_tags=true&limit=30",
+      "name": "Habr En"
+    }
+  ],
   "smtp": {
     "host": "localhost",
     "port": 1025,
