@@ -6,25 +6,33 @@ mod config;
 mod feeds;
 mod hackernews;
 mod schemas;
+mod vacuum;
 
 use crate::hackernews::prelude::*;
 use arg_parse::CmdArgs;
-use common::{FetchOperation, FetcherType};
+use common::FetcherType;
 use config::AppConfig;
 use feeds::prelude::RssFetcher;
+use vacuum::Vacuum;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = &CmdArgs::parse(std::env::args().collect())?;
     let config = AppConfig::from_file(&args.config.clone())?;
-    let mut fetchers = vec![];
 
+    // Run the vacuum operation separately if requested
+    if args.vacuum {
+        let num_deleted = Vacuum::new(&config).run().await?;
+        println!("Vacuumed {num_deleted} items");
+    }
+
+    // Create a list of fetchers to run
+    let mut fetchers = vec![];
     // HNFetcher is used only if feeds_only is not set to true
     {
         let mut skip_hackernews = false;
-        match &args.feeds_only {
-            Some(feeds_only) => skip_hackernews = *feeds_only,
-            None => {}
+        if let Some(feeds_only) = &args.feeds_only {
+            skip_hackernews = *feeds_only;
         }
 
         if !skip_hackernews {
@@ -32,26 +40,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     // RssFetcher is optional, if the config has rss_sources then add it to the fetchers
-    match &config.rss_sources {
-        Some(sources) => {
-            if !sources.is_empty() {
-                fetchers.push(FetcherType::RssFetcher(RssFetcher::new(&config)));
-            }
+    if let Some(sources) = &config.rss_sources {
+        if !sources.is_empty() {
+            fetchers.push(FetcherType::RssFetcher(RssFetcher::new(&config)));
         }
-        None => {}
     }
 
     // Run the fetchers
     for fetcher in fetchers {
         let fetched_items = match fetcher {
-            FetcherType::HNFetcher(f) => f.run(&args.get_action()).await?,
-            FetcherType::RssFetcher(f) => f.run(&args.get_action()).await?,
+            FetcherType::HNFetcher(f) => f.run(args.reverse).await?,
+            FetcherType::RssFetcher(f) => f.run(args.reverse).await?,
         };
 
-        match args.get_action() {
-            FetchOperation::Fetch(_) => println!("Fetched new items: {fetched_items}"),
-            FetchOperation::Vacuum => println!("Vacuumed the database"),
-        }
+        println!("Fetched new items: {fetched_items}");
     }
 
     Ok(())

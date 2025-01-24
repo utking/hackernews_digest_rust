@@ -1,7 +1,5 @@
 use std::io::Error;
 
-use crate::common::FetchOperation;
-
 #[derive(Debug, Clone)]
 pub struct CmdArgs {
     pub config: String,
@@ -54,13 +52,5 @@ impl CmdArgs {
             vacuum,
             feeds_only: Some(feeds_only),
         })
-    }
-
-    pub fn get_action(&self) -> FetchOperation {
-        if self.vacuum {
-            FetchOperation::Vacuum
-        } else {
-            FetchOperation::Fetch(self.reverse)
-        }
     }
 }

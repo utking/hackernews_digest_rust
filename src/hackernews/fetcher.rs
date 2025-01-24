@@ -1,8 +1,7 @@
 use crate::{
-    common, config, establish_connection, run_migrations, AnyConnection, DigestItem, Fetch,
-    Filters, JsonNewsItem, Regex, Url,
+    common::deduplicate, config, establish_connection, run_migrations, AnyConnection, DigestItem,
+    Fetch, Filters, JsonNewsItem, Regex, Url,
 };
-use common::FetchOperation;
 use config::AppConfig;
 
 pub struct HNFetcher {
@@ -56,23 +55,43 @@ impl HNFetcher {
 
             // Skip blacklisted domains, but store the news item in the database
             if self.is_blacklisted(&digest_item.news_url) {
-                skipped.push(digest_item.clone());
+                skipped.push(DigestItem {
+                    news_title: String::from("-"),
+                    news_url: String::from("-"),
+                    created_at: digest_item.created_at,
+                    id: digest_item.id,
+                });
                 continue;
             }
 
             // Skip items with missing URLs from the digest, but store them in the database
             if self.is_missing_url(&digest_item.news_url) {
-                skipped.push(digest_item.clone());
+                skipped.push(DigestItem {
+                    news_title: String::from("-"),
+                    news_url: String::from("-"),
+                    created_at: digest_item.created_at,
+                    id: digest_item.id,
+                });
                 continue;
             }
 
             // Apply filters
             if !self.keep_item(&digest_item.news_title.clone(), reverse) {
-                skipped.push(digest_item.clone());
+                skipped.push(DigestItem {
+                    news_title: String::from("-"),
+                    news_url: String::from("-"),
+                    created_at: digest_item.created_at,
+                    id: digest_item.id,
+                });
                 continue;
             }
 
-            digest.push(digest_item.clone());
+            digest.push(DigestItem {
+                news_title: digest_item.news_title.clone(),
+                news_url: digest_item.news_url.clone(),
+                created_at: digest_item.created_at,
+                id: digest_item.id,
+            });
         }
 
         // Store the skipped news items in the database
@@ -80,37 +99,21 @@ impl HNFetcher {
         // Store the news items in the database
         crate::store_news_items(&digest, &mut conn)?;
 
-        Ok(self.deduplicate(&digest))
+        Ok(deduplicate(&digest))
     }
 
     /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
-    fn keep_item(&self, title: &str, reverse: bool) -> bool {
-        let mut keep: bool = false;
-        if reverse {
-            for filter in &self.filters {
-                if !filter.is_match(title) {
-                    keep = true;
-                    break;
-                }
-            }
-        } else {
-            for filter in &self.filters {
-                if filter.is_match(title) {
-                    keep = true;
-                    break;
-                }
+    fn keep_item(&self, title: &String, reverse: bool) -> bool {
+        let keep: bool = reverse;
+        for filter in &self.filters {
+            if filter.is_match(title) {
+                return !reverse;
             }
         }
         keep
     }
 
-    /// Vacuum the database - remove old news items
-    async fn vacuum(&self, conn: &mut AnyConnection) -> Result<i32, Box<dyn std::error::Error>> {
-        let num_deleted = crate::vacuum(self.config.purge_after_days as i32, conn)?;
-
-        Ok(num_deleted as i32)
-    }
-
+    /// Check if a URL is missing or empty in the digest item
     fn is_missing_url(&self, item_url: &String) -> bool {
         item_url.is_empty() || item_url == "-"
     }
@@ -157,28 +160,13 @@ impl HNFetcher {
 
         false
     }
-
-    /// De-duplicate the fetched items and return the unique items. URL is used as the key.
-    fn deduplicate(&self, items: &Vec<DigestItem>) -> Vec<DigestItem> {
-        let mut unique_items: Vec<DigestItem> = Vec::new();
-        let mut urls: Vec<String> = Vec::new();
-
-        for item in items {
-            if !urls.contains(&item.news_url.clone()) {
-                urls.push(item.news_url.clone());
-                unique_items.push(item.clone());
-            }
-        }
-
-        unique_items
-    }
 }
 
 impl Fetch for HNFetcher {
     /// Run the fetcher with the given operation. The operation can be either fetching
     /// new news items or vacuuming the database. Return the number of items fetched.
     /// If digest is not empty, send an email with the digest to the email address in the config.
-    async fn run(&self, op: &FetchOperation) -> Result<i32, Box<dyn std::error::Error>> {
+    async fn run(&self, reverse: bool) -> Result<i32, Box<dyn std::error::Error>> {
         let mut conn = establish_connection(&self.config.db_dsn);
         let conn_arg = &mut conn;
         match run_migrations(conn_arg) {
@@ -186,25 +174,20 @@ impl Fetch for HNFetcher {
             Err(e) => eprintln!("Error running migrations: {e}"),
         }
 
-        match op {
-            FetchOperation::Fetch(reverse) => {
-                let digest = self.fetch(*reverse, conn_arg).await?;
-                // Send an email with the digest if it's not empty
-                if !digest.is_empty() {
-                    // send the digest to the email address in the config, if given
-                    self.config.get_sender().send_digest(&digest).await?;
-                }
-                Ok(digest.len() as i32)
-            }
-            FetchOperation::Vacuum => self.vacuum(conn_arg).await,
+        let digest = self.fetch(reverse, conn_arg).await?;
+        // Send an email with the digest if it's not empty
+        if !digest.is_empty() {
+            // send the digest to the email address in the config, if given
+            self.config.get_sender().send_digest(&digest).await?;
         }
+        Ok(digest.len() as i32)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{common::FetchOperation, config::AppConfig, Fetch, HNFetcher};
-    use crate::{schemas::prelude::run_migrations, DigestItem, ItemFilter};
+    use super::{config::AppConfig, Fetch, HNFetcher};
+    use crate::{common::deduplicate, schemas::prelude::run_migrations, DigestItem, ItemFilter};
     use tokio::test;
 
     #[test]
@@ -485,8 +468,7 @@ mod test {
         };
 
         let fetcher = HNFetcher::new(&config).with_base_url(expected_addr_str);
-        let op = FetchOperation::Fetch(false);
-        let num_fetched = fetcher.run(&op).await.unwrap();
+        let num_fetched = fetcher.run(false).await.unwrap();
 
         prefetch_mock.assert();
         news_item_mock.assert();
@@ -549,8 +531,7 @@ mod test {
         };
 
         let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
-        let op = FetchOperation::Fetch(true);
-        let num_fetched = fetcher.run(&op).await.unwrap();
+        let num_fetched = fetcher.run(true).await.unwrap();
 
         prefetch_mock.assert();
         news_item_mock.assert();
@@ -775,21 +756,8 @@ mod test {
                 id: 4,
             },
         ];
-        let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
-            filters: vec![ItemFilter {
-                value: "rust".to_string(),
-                title: "PLs".to_string(),
-            }],
-            smtp: None,
-            telegram: None,
-            rss_sources: None,
-            purge_after_days: 7,
-            blacklisted_domains: vec![],
-        };
-        let fetcher = crate::HNFetcher::new(&config);
 
-        let deduplicated = fetcher.deduplicate(&pulled_items);
+        let deduplicated = deduplicate(&pulled_items);
         assert_eq!(deduplicated.len(), 2, "Deduplication failed");
 
         assert_eq!(deduplicated[0].id, 1, "Deduplication failed");

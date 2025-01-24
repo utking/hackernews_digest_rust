@@ -2,8 +2,8 @@ use regex::Regex;
 use rss::Channel;
 
 use crate::{
-    common::FetchOperation, config::AppConfig, establish_connection, run_migrations, AnyConnection,
-    DigestItem, Fetch, Filters,
+    config::{AppConfig, RssSource},
+    establish_connection, run_migrations, AnyConnection, DigestItem, Fetch, Filters,
 };
 
 use super::prelude::FeedItem;
@@ -54,48 +54,44 @@ impl RssFetcher {
     /// Fetch the latest news from the Habr API
     async fn fetch(
         &self,
-        source_url: &str,
+        source: &RssSource,
         reverse: bool,
-        mut _conn: &mut AnyConnection,
+        mut conn: &mut AnyConnection,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
-        let digest = self.pull_feed_items(source_url, reverse).await?;
+        let mut digest = Vec::new();
+        let prefetched_items = self.pull_feed_items(&source.url, reverse).await?;
+        let items_ids: Vec<i32> = prefetched_items.iter().map(|item| item.id).collect();
+
+        // Get the items that are not already in the database
+        let ids_to_pull = crate::get_ids_to_pull(items_ids, &mut conn);
+        // Compile a digest from the items that are not in the database yet
+        for id in ids_to_pull {
+            let item = prefetched_items.iter().find(|item| item.id == id);
+            if let Some(item) = item {
+                digest.push(item.clone());
+            }
+        }
 
         // Store the news items in the database
-        // crate::store_news_items(&digest, &mut conn)?;
+        crate::store_feed_items(source.name.clone(), &digest, &mut conn)?;
 
         Ok(digest)
     }
 
     /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
     fn keep_item(&self, title: &String, reverse: bool) -> bool {
-        let mut keep: bool = false;
-        if reverse {
-            for filter in &self.filters {
-                if !filter.is_match(title) {
-                    keep = true;
-                    break;
-                }
-            }
-        } else {
-            for filter in &self.filters {
-                if filter.is_match(title) {
-                    keep = true;
-                    break;
-                }
+        let keep: bool = reverse;
+        for filter in &self.filters {
+            if filter.is_match(title) {
+                return !reverse;
             }
         }
         keep
     }
-
-    async fn vacuum(&self, conn: &mut AnyConnection) -> Result<i32, Box<dyn std::error::Error>> {
-        let num_deleted = crate::vacuum(self.config.purge_after_days as i32, conn)?;
-
-        Ok(num_deleted as i32)
-    }
 }
 
 impl Fetch for RssFetcher {
-    async fn run(&self, op: &FetchOperation) -> Result<i32, Box<dyn std::error::Error>> {
+    async fn run(&self, reverse: bool) -> Result<i32, Box<dyn std::error::Error>> {
         let mut conn = establish_connection(&self.config.db_dsn);
         let conn_arg = &mut conn;
         match run_migrations(conn_arg) {
@@ -103,21 +99,92 @@ impl Fetch for RssFetcher {
             Err(e) => eprintln!("Error running migrations: {e}"),
         }
 
-        match op {
-            FetchOperation::Fetch(reverse) => {
-                let mut total_fetched = 0;
-                for source in self.config.rss_sources.clone().unwrap_or(vec![]) {
-                    let digest = self.fetch(&source.url, *reverse, conn_arg).await?;
-                    // Send an email with the digest if it's not empty
-                    if !digest.is_empty() {
-                        // send the digest to the email address in the config, if given
-                        self.config.get_sender().send_digest(&digest).await?;
-                        total_fetched += digest.len();
-                    }
-                }
-                Ok(total_fetched as i32)
+        let mut total_fetched = 0;
+        for source in self.config.rss_sources.clone().unwrap_or(vec![]) {
+            let digest = self.fetch(&source, reverse, conn_arg).await?;
+            // Send an email with the digest if it's not empty
+            if !digest.is_empty() {
+                // send the digest to the email address in the config, if given
+                self.config.get_sender().send_digest(&digest).await?;
+                total_fetched += digest.len();
             }
-            FetchOperation::Vacuum => self.vacuum(conn_arg).await,
         }
+        Ok(total_fetched as i32)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{AppConfig, RssFetcher};
+    use crate::{feeds::prelude::FeedItem, ItemFilter};
+    use tokio::test;
+
+    #[test]
+    async fn test_filter_fetched() {
+        let config = AppConfig {
+            db_dsn: ":memory:".to_string(),
+            filters: vec![ItemFilter {
+                value: "rust,python".to_string(),
+                title: "PLs".to_string(),
+            }],
+            smtp: None,
+            telegram: None,
+            rss_sources: None,
+            purge_after_days: 7,
+            blacklisted_domains: vec![],
+        };
+
+        // Filter with direct filtering first
+        let mut reverse = false;
+
+        let fetcher = RssFetcher::new(&config);
+        let pulled_items: Vec<FeedItem> = vec![
+            FeedItem {
+                id: 123,
+                title: "Python is a programming language".to_string(),
+                guid: "https://example.com/items/123".to_string(),
+                created_at: 0,
+                description: String::from("Some description"),
+                categories: vec![String::from("Python")],
+            },
+            FeedItem {
+                id: 202,
+                title: "Rust is cool".to_string(),
+                guid: "https://example.com/items/202".to_string(),
+                created_at: 0,
+                description: String::from("Some description"),
+                categories: vec![String::from("Rust")],
+            },
+            FeedItem {
+                id: 303,
+                title: "1C is not cool".to_string(),
+                guid: "https://example.com/items/303".to_string(),
+                created_at: 0,
+                description: String::from("Some description"),
+                categories: vec![String::from("1C")],
+            },
+        ];
+
+        assert_eq!(
+            pulled_items
+                .iter()
+                .filter(|i| fetcher.keep_item(&i.title.clone(), reverse))
+                .count(),
+            2,
+            "Filter/keep check failed",
+        );
+
+        eprintln!("\n\n\n");
+
+        // Filter with reverse filtering
+        reverse = true;
+        assert_eq!(
+            pulled_items
+                .iter()
+                .filter(|i| fetcher.keep_item(&i.title.clone(), reverse))
+                .count(),
+            1,
+            "Reverse filter/keep check failed",
+        );
     }
 }
