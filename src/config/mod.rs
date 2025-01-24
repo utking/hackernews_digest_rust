@@ -1,4 +1,7 @@
-use crate::{Deserialize, DummySender, ItemFilter, Sender, Serialize, SmtpSender, TelegramSender};
+use crate::{
+    sender::{DummySender, Sender, SmtpSender, TelegramSender},
+    Deserialize, ItemFilter, Serialize,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SmtpConfig {
