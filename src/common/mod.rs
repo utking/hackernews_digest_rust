@@ -1,5 +1,12 @@
+use crate::{feeds::prelude::RssFetcher, HNFetcher};
+
 mod filter;
 mod repository;
+
+pub enum FetcherType {
+    HNFetcher(HNFetcher),
+    RssFetcher(RssFetcher),
+}
 
 #[derive(Debug, Clone)]
 pub enum FetchOperation {
