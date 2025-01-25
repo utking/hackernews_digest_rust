@@ -59,7 +59,7 @@ impl RssFetcher {
         let items_ids: Vec<i32> = prefetched_items.iter().map(|item| item.id).collect();
 
         // Get the items that are not already in the database
-        let ids_to_pull = crate::get_ids_to_pull(items_ids, &mut conn);
+        let ids_to_pull = crate::get_ids_to_pull(&source.name, items_ids, &mut conn);
         // Compile a digest from the items that are not in the database yet
         for id in ids_to_pull {
             let item = prefetched_items.iter().find(|item| item.id == id);

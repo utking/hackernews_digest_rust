@@ -48,7 +48,7 @@ impl HNFetcher {
         let mut skipped = Vec::new();
 
         let prefetched = self.prefetch().await?;
-        let ids_to_pull = crate::get_ids_to_pull(prefetched, &mut conn);
+        let ids_to_pull = crate::get_ids_to_pull("hackernews", prefetched, &mut conn);
 
         for id in ids_to_pull {
             let news_item = self.fetch_news_item(id).await?;
@@ -399,7 +399,7 @@ mod test {
         let prefetched = fetcher.prefetch().await.unwrap();
         prefetch_mock.assert();
 
-        let ids_to_pull = crate::get_ids_to_pull(prefetched, &mut conn);
+        let ids_to_pull = crate::get_ids_to_pull("hackernews", prefetched, &mut conn);
         assert_eq!(ids_to_pull.len(), 3, "Pulling IDs from DB failed");
         assert_eq!(ids_to_pull, vec![3, 4, 5], "Pulling IDs from DB failed");
     }

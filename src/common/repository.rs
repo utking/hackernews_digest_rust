@@ -72,11 +72,17 @@ pub fn vacuum(
 }
 
 /// Get IDs of the news items whose IDs are not in the database yet
-pub fn get_ids_to_pull(prefetched_ids: Vec<i32>, conn: &mut AnyConnection) -> Vec<i32> {
+pub fn get_ids_to_pull(
+    source_name: &str,
+    prefetched_ids: Vec<i32>,
+    conn: &mut AnyConnection,
+) -> Vec<i32> {
+    use crate::rss_items::source;
     use crate::schemas::prelude::rss_items::dsl::{id, rss_items};
 
     let existing_ids: Vec<i32> = rss_items
         .select(id)
+        .filter(source.eq(source_name))
         .filter(id.eq_any(&prefetched_ids))
         .load::<i32>(conn)
         .expect("Error loading IDs");
