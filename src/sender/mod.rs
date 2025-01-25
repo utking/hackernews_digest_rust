@@ -87,7 +87,7 @@ impl DigestSender for SmtpSender {
 
         match mailer.send(&email) {
             Ok(_) => return Ok(()),
-            Err(e) => eprintln!("Could not send email: {e:?}"),
+            Err(e) => eprintln!("Could not send email: {e}"),
         }
 
         Ok(())
@@ -142,7 +142,7 @@ impl DigestSender for TelegramSender {
             {
                 Ok(_) => {}
                 Err(e) => {
-                    eprintln!("Could not send message: {e:?}");
+                    eprintln!("Could not send message: {e}");
                     return Err(Box::new(e));
                 }
             }

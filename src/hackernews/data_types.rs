@@ -10,14 +10,13 @@ pub struct JsonNewsItem {
     time: i64,
 }
 
-impl JsonNewsItem {
-    /// Convert to a `DigestItem` for storage
-    pub fn as_digest_item(&self) -> DigestItem {
+impl Into<DigestItem> for JsonNewsItem {
+    fn into(self) -> DigestItem {
         let mut item = DigestItem {
-            id: self.id as i32,
+            id: self.id as _,
             news_title: self.title.clone().unwrap_or_default(),
             news_url: self.url.clone().unwrap_or_default(),
-            created_at: self.time as i32,
+            created_at: self.time as _,
         };
 
         if item.news_url.is_empty() {

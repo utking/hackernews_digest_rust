@@ -10,8 +10,8 @@ pub struct FeedItem {
     pub categories: Vec<String>,
 }
 
-impl FeedItem {
-    pub fn from(item: &rss::Item) -> FeedItem {
+impl From<&rss::Item> for FeedItem {
+    fn from(item: &rss::Item) -> FeedItem {
         let categories = item
             .categories()
             .iter()

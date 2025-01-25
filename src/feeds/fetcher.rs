@@ -36,10 +36,10 @@ impl RssFetcher {
         for item in news_items {
             if self.keep_item(&item.title.clone(), reverse) {
                 items.push(DigestItem {
-                    id: item.id as i32,
+                    id: item.id as _,
                     news_title: item.title,
                     news_url: item.guid,
-                    created_at: item.created_at as i32,
+                    created_at: item.created_at as _,
                 });
             }
         }
@@ -172,8 +172,6 @@ mod test {
             2,
             "Filter/keep check failed",
         );
-
-        eprintln!("\n\n\n");
 
         // Filter with reverse filtering
         reverse = true;

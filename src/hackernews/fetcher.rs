@@ -51,8 +51,8 @@ impl HNFetcher {
         let ids_to_pull = crate::get_ids_to_pull(prefetched, &mut conn);
 
         for id in ids_to_pull {
-            let news_item = &self.fetch_news_item(id).await?;
-            let digest_item = &news_item.as_digest_item();
+            let news_item = self.fetch_news_item(id).await?;
+            let digest_item: DigestItem = news_item.into();
 
             // Skip blacklisted domains, but store the news item in the database
             if self.is_blacklisted(&digest_item.news_url) {
@@ -340,7 +340,7 @@ mod test {
         let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
         let item = fetcher.fetch_news_item(111).await.unwrap();
         prefetch_mock.assert();
-        let digest_item = item.as_digest_item();
+        let digest_item: DigestItem = item.into();
         // the item is with empty URL, so the title and the URL are reset to empty
         assert_eq!(digest_item.news_title, "-");
         assert_eq!(digest_item.news_url, "-");

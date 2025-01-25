@@ -114,7 +114,7 @@ pub fn store_feed_items(
         .map(|item| FeedItem {
             id: item.id,
             source: feed_source.to_string(),
-            created_at: current_timestamp as i32,
+            created_at: current_timestamp as _,
         })
         .collect();
 
