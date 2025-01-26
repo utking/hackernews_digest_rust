@@ -3,7 +3,8 @@ use rss::Channel;
 
 use crate::{
     config::{AppConfig, RssSource},
-    establish_connection, run_migrations, AnyConnection, DigestItem, Fetch, Filters,
+    storage::{self, Storage},
+    DigestItem, Fetch, Filters,
 };
 
 use super::prelude::FeedItem;
@@ -36,10 +37,10 @@ impl RssFetcher {
         for item in news_items {
             if self.keep_item(&item.title.clone(), reverse) {
                 items.push(DigestItem {
-                    id: item.id as _,
+                    id: item.id,
                     news_title: item.title,
                     news_url: item.guid,
-                    created_at: item.created_at as _,
+                    created_at: item.created_at,
                 });
             }
         }
@@ -52,11 +53,11 @@ impl RssFetcher {
         &self,
         source: &RssSource,
         reverse: bool,
-        mut conn: &mut AnyConnection,
+        mut conn: &mut Storage,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
         let prefetched_items = self.pull_feed_items(&source.url, reverse).await?;
-        let items_ids: Vec<i32> = prefetched_items.iter().map(|item| item.id).collect();
+        let items_ids: Vec<i64> = prefetched_items.iter().map(|item| item.id).collect();
 
         // Get the items that are not already in the database
         let ids_to_pull = crate::get_ids_to_pull(&source.name, items_ids, &mut conn);
@@ -88,16 +89,11 @@ impl RssFetcher {
 
 impl Fetch for RssFetcher {
     async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
-        let mut conn = establish_connection(&self.config.db_dsn);
-        let conn_arg = &mut conn;
-        match run_migrations(conn_arg) {
-            Ok(()) => {}
-            Err(e) => eprintln!("Error running migrations: {e}"),
-        }
+        let conn = &mut storage::FileStorage::from_file(&self.config.db_dsn);
 
         let mut total_fetched = 0;
         for source in self.config.rss_sources.clone().unwrap_or_default() {
-            let digest = self.fetch(&source, reverse, conn_arg).await?;
+            let digest = self.fetch(&source, reverse, conn).await?;
             // Send an email with the digest if it's not empty
             if !digest.is_empty() {
                 // send the digest to the email address in the config, if given

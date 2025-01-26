@@ -1,7 +1,8 @@
 use crate::{
     common::{deduplicate, is_missing_url},
-    config, establish_connection, run_migrations, AnyConnection, DigestItem, Fetch, Filters,
-    JsonNewsItem, Regex, Url,
+    config,
+    storage::{self, FileStorage, Storage},
+    DigestItem, Fetch, Filters, JsonNewsItem, Regex, Url,
 };
 use config::AppConfig;
 
@@ -42,7 +43,7 @@ impl HNFetcher {
     async fn fetch(
         &self,
         reverse: bool,
-        mut conn: &mut AnyConnection,
+        mut conn: &mut Storage,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
         let mut skipped = Vec::new();
@@ -115,17 +116,17 @@ impl HNFetcher {
     }
 
     /// Fetch the top stories' IDs from the API
-    async fn prefetch(&self) -> Result<Vec<i32>, Box<dyn std::error::Error>> {
+    async fn prefetch(&self) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
         let result = reqwest::get(format!("{}/topstories.json", self.api_base_url))
             .await?
-            .json::<Vec<i32>>()
+            .json::<Vec<i64>>()
             .await?;
 
         Ok(result)
     }
 
     /// Fetch a single news item by its ID
-    async fn fetch_news_item(&self, id: i32) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
+    async fn fetch_news_item(&self, id: i64) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
         let result = reqwest::get(format!("{}/item/{id}.json", self.api_base_url))
             .await?
             .json::<JsonNewsItem>()
@@ -163,14 +164,9 @@ impl Fetch for HNFetcher {
     /// new news items or vacuuming the database. Return the number of items fetched.
     /// If digest is not empty, send an email with the digest to the email address in the config.
     async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
-        let mut conn = establish_connection(&self.config.db_dsn);
-        let conn_arg = &mut conn;
-        match run_migrations(conn_arg) {
-            Ok(()) => {}
-            Err(e) => eprintln!("Error running migrations: {e}"),
-        }
+        let conn = &mut storage::Storage::from_file(&self.config.db_dsn);
 
-        let digest = self.fetch(reverse, conn_arg).await?;
+        let digest = self.fetch(reverse, conn).await?;
         // Send an email with the digest if it's not empty
         if !digest.is_empty() {
             // send the digest to the email address in the config, if given
@@ -188,8 +184,7 @@ mod test {
     use super::{config::AppConfig, Fetch, HNFetcher};
     use crate::{
         common::{deduplicate, is_missing_url},
-        schemas::prelude::run_migrations,
-        DigestItem, ItemFilter,
+        storage, DigestItem, ItemFilter,
     };
     use tokio::test;
 
@@ -390,9 +385,7 @@ mod test {
         };
         let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
 
-        let mut conn = crate::establish_connection(&config.db_dsn);
-        // apply migrations
-        run_migrations(&mut conn).unwrap();
+        let mut conn = storage::FileStorage::from_file(&config.db_dsn);
         // store the pulled items in the database to have IDs to pull
         crate::store_news_items(&pulled_items, &mut conn).unwrap();
 

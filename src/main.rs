@@ -5,16 +5,15 @@ mod common;
 mod config;
 mod feeds;
 mod hackernews;
-mod schemas;
 mod sender;
-mod vacuum;
+mod storage;
 
 use crate::hackernews::prelude::*;
 use arg_parse::CmdArgs;
 use common::FetcherType;
 use config::AppConfig;
 use feeds::prelude::RssFetcher;
-use vacuum::Vacuum;
+use storage::FileStorage;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,9 +22,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run the vacuum operation separately if requested
     if args.vacuum {
-        let num_deleted = Vacuum::new(&config).run()?;
-        println!("Vacuumed {num_deleted} items");
-        return Ok(());
+        match vacuum(
+            &mut storage::Storage::from_file(&config.db_dsn),
+            config.purge_after_days,
+        ) {
+            Ok(num_deleted) => {
+                println!("Vacuumed {num_deleted} items");
+                return Ok(());
+            }
+            Err(e) => eprintln!("Error vacuuming the database: {e}"),
+        }
     }
 
     // Create a list of fetchers to run
