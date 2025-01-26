@@ -1,23 +1,21 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader, BufWriter, Error, Write},
+    io::{BufRead, BufReader, BufWriter, Error, Seek, Write},
 };
 
 use chrono::DateTime;
 
 pub trait FileStorage {
     fn query_ids(&self, source: &str) -> Vec<i64>;
-    fn insert_items(&mut self, items: &Vec<Record>) -> Result<(), Error>;
-    fn dump(&self) -> Result<(), Error>;
-    fn vacuum(&mut self, retain_days: usize) -> Result<usize, Error>;
-    fn from_file(filename: &str) -> Self
-    where
-        Self: Sized;
+    fn insert_items(&mut self, items: &[Record]) -> Result<(), Error>;
+    fn dump(&mut self) -> Result<(), Error>;
+    fn vacuum(&mut self, retain_days: i64) -> Result<usize, Error>;
+    fn from_fs(file: File) -> Self;
 }
 
 pub struct Storage {
-    pub filename: String,
     pub records: Vec<Record>,
+    file: File,
 }
 
 #[derive(Clone, Debug)]
@@ -33,12 +31,12 @@ impl From<String> for Record {
         match item.split(',').collect::<Vec<&str>>().as_slice() {
             [id, source, created_at] => Self {
                 id: id.parse().unwrap_or(0),
-                source: source.to_string(),
+                source: (*source).to_string(),
                 created_at: created_at.parse().unwrap_or(0),
             },
             _ => Self {
                 id: 0,
-                source: "".to_string(),
+                source: String::new(),
                 created_at: 0,
             },
         }
@@ -88,34 +86,42 @@ impl Storage {
     fn len(&self) -> usize {
         self.records.len()
     }
+
+    #[allow(dead_code)]
+    /// Reload records from the file
+    fn reload(&mut self) -> Result<(), Error> {
+        self.records.clear(); // clear the records before reloading
+        self.file.seek(std::io::SeekFrom::Start(0))?; // rewind the file to the beginning
+        let reader = BufReader::new(&self.file);
+        reader
+            .lines()
+            .map_while(Result::ok)
+            .map(Record::from)
+            .for_each(|r| self.records.push(r));
+        Ok(())
+    }
 }
 
 impl FileStorage for Storage {
     #[must_use]
     /// Load records from a file. If the file does not exist, it will be created
-    /// and an empty Storage object will be returned.
-    fn from_file(filename: &str) -> Self {
-        let mut records = Vec::new();
-        match File::open(filename) {
-            Ok(file) => {
-                let reader = BufReader::new(file);
-                for line in reader.lines() {
-                    match line {
-                        Ok(line) => {
-                            let record = Record::from(line);
-                            records.push(record);
-                        }
-                        Err(_) => {}
-                    }
-                }
-            }
-            Err(e) => panic!("Could not open storage: {e}"),
+    fn from_fs(file: File) -> Self
+    where
+        Self: Sized,
+    {
+        let mut new_storage = Self {
+            records: Vec::new(),
+            file,
         };
 
-        Self {
-            filename: filename.to_string(),
-            records,
+        let mut records = Vec::new();
+        let reader = BufReader::new(&new_storage.file);
+        for line in reader.lines() {
+            let record = Record::from(line.unwrap());
+            records.push(record);
         }
+        new_storage.records = records;
+        new_storage
     }
 
     /// Query the storage for a list of ids based on the source part of the
@@ -129,13 +135,19 @@ impl FileStorage for Storage {
     }
 
     /// Dump records to a file
-    fn dump(&self) -> Result<(), Error> {
-        let file = File::create(&self.filename)?;
-        let mut writer = BufWriter::new(file);
+    fn dump(&mut self) -> Result<(), Error> {
+        // rewind the file to the beginning to start anew
+        self.file
+            .seek(std::io::SeekFrom::Start(0))
+            .expect("Failed to seek to the beginning");
+        let mut writer = BufWriter::new(&self.file);
         for record in &self.records {
             let line: String = (*record).clone().into();
-            writer.write(format!("{}\n", line).as_bytes())?;
+            _ = writer
+                .write(format!("{line}\n").as_bytes())
+                .expect("Failed to write to file");
         }
+        writer.flush().expect("Failed to flush the writer");
         Ok(())
     }
 
@@ -143,11 +155,11 @@ impl FileStorage for Storage {
     /// the operation will be aborted and the storage will be left unchanged.
     /// If an error occurs, the already inserted items will be removed (transaction
     /// revert).
-    fn insert_items(&mut self, items: &Vec<Record>) -> Result<(), Error> {
+    fn insert_items(&mut self, items: &[Record]) -> Result<(), Error> {
         let mut items_done = 0;
         for item in items {
-            match self.add(&item) {
-                Ok(_) => {
+            match self.add(item) {
+                Ok(()) => {
                     items_done += 1;
                 }
                 Err(e) => {
@@ -168,9 +180,9 @@ impl FileStorage for Storage {
     }
 
     /// Remove records that are older than the specified number of days.
-    fn vacuum(&mut self, retain_days: usize) -> Result<usize, Error> {
+    fn vacuum(&mut self, retain_days: i64) -> Result<usize, Error> {
         let now = chrono::Utc::now();
-        let oldest = now - chrono::Duration::days(retain_days as i64);
+        let oldest = now - chrono::Duration::days(retain_days);
         let records_num = self.records.len();
         self.records
             .retain(|r| match DateTime::from_timestamp(r.created_at, 0) {
@@ -181,6 +193,7 @@ impl FileStorage for Storage {
                 }
                 None => false,
             });
+        self.dump()?;
         Ok(records_num - self.records.len())
     }
 }
@@ -191,7 +204,10 @@ mod test {
 
     #[test]
     fn test_storage() {
-        let mut storage = Storage::from_file(":no-file:");
+        let mut storage = Storage {
+            records: Vec::new(),
+            file: tempfile::tempfile().unwrap(),
+        };
         let record = Record {
             id: 1,
             source: "test".to_string(),
@@ -229,7 +245,10 @@ mod test {
 
     #[test]
     fn test_adding_existing_record() {
-        let mut storage = Storage::from_file(":no-file:");
+        let mut storage = Storage {
+            records: Vec::new(),
+            file: tempfile::tempfile().unwrap(),
+        };
         let record = Record {
             id: 1,
             source: "test".to_string(),
@@ -244,7 +263,10 @@ mod test {
 
     #[test]
     fn test_adding_and_removing_multiple_records() {
-        let mut storage = Storage::from_file(":no-file:");
+        let mut storage = Storage {
+            records: Vec::new(),
+            file: tempfile::tempfile().unwrap(),
+        };
         let records = vec![
             Record {
                 id: 1,
@@ -282,7 +304,10 @@ mod test {
 
     #[test]
     fn test_vacuum() {
-        let mut storage = Storage::from_file(":no-file:");
+        let mut storage = Storage {
+            records: Vec::new(),
+            file: tempfile::tempfile().unwrap(),
+        };
         let one_day_ago = chrono::Utc::now() - chrono::Duration::days(1);
         let two_days_ago = chrono::Utc::now() - chrono::Duration::days(2);
         let records = vec![
@@ -314,7 +339,8 @@ mod test {
 
     #[test]
     fn test_query_ids() {
-        let mut storage = Storage::from_file(":no-file:");
+        let tmp_file = tempfile::tempfile().unwrap();
+        let mut storage = Storage::from_fs(tmp_file);
         let records = vec![
             Record {
                 id: 1,
@@ -333,6 +359,36 @@ mod test {
             },
         ];
         storage.insert_items(&records).unwrap();
+        assert_eq!(storage.query_ids("rss"), vec![1, 3]);
+        assert_eq!(storage.query_ids("api"), vec![2]);
+    }
+
+    #[test]
+    fn test_dump_file() {
+        let tmp_file = tempfile::tempfile().unwrap();
+        let mut storage = Storage::from_fs(tmp_file);
+        let records = vec![
+            Record {
+                id: 1,
+                source: "rss".to_string(),
+                created_at: 0,
+            },
+            Record {
+                id: 2,
+                source: "api".to_string(),
+                created_at: 0,
+            },
+            Record {
+                id: 3,
+                source: "rss".to_string(),
+                created_at: 0,
+            },
+        ];
+        storage.insert_items(&records).unwrap();
+        storage.dump().unwrap();
+
+        storage.reload().unwrap();
+        assert_eq!(storage.len(), 3);
         assert_eq!(storage.query_ids("rss"), vec![1, 3]);
         assert_eq!(storage.query_ids("api"), vec![2]);
     }

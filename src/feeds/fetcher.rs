@@ -3,7 +3,7 @@ use rss::Channel;
 
 use crate::{
     config::{AppConfig, RssSource},
-    storage::{self, Storage},
+    storage::{FileStorage, Record, Storage},
     DigestItem, Fetch, Filters,
 };
 
@@ -12,15 +12,17 @@ use super::prelude::FeedItem;
 pub struct RssFetcher {
     config: AppConfig,
     filters: Vec<Regex>,
+    storage: Storage,
 }
 
 impl RssFetcher {
     /// Create a new fetcher
     #[must_use]
-    pub fn new(config: &AppConfig) -> RssFetcher {
+    pub fn new(config: &AppConfig, storage: Storage) -> RssFetcher {
         Self {
             config: config.clone(),
             filters: Filters::compile(&config.filters),
+            storage,
         }
     }
 
@@ -50,27 +52,26 @@ impl RssFetcher {
 
     /// Fetch the latest news from the Habr API
     async fn fetch(
-        &self,
+        &mut self,
         source: &RssSource,
         reverse: bool,
-        mut conn: &mut Storage,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
         let prefetched_items = self.pull_feed_items(&source.url, reverse).await?;
         let items_ids: Vec<i64> = prefetched_items.iter().map(|item| item.id).collect();
 
         // Get the items that are not already in the database
-        let ids_to_pull = crate::get_ids_to_pull(&source.name, items_ids, &mut conn);
+        let ids_to_pull = self.get_ids_to_pull(&source.name, items_ids);
         // Compile a digest from the items that are not in the database yet
-        for id in ids_to_pull {
-            let item = prefetched_items.iter().find(|item| item.id == id);
+        for id in &ids_to_pull {
+            let item = prefetched_items.iter().find(|item| item.id == *id);
             if let Some(item) = item {
                 digest.push(item.clone());
             }
         }
 
         // Store the news items in the database
-        crate::store_feed_items(&source.name, &digest, &mut conn)?;
+        self.store_items(&source.name, &digest)?;
 
         Ok(digest)
     }
@@ -88,12 +89,15 @@ impl RssFetcher {
 }
 
 impl Fetch for RssFetcher {
-    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
-        let conn = &mut storage::FileStorage::from_file(&self.config.db_dsn);
-
+    async fn run(&mut self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
         let mut total_fetched = 0;
-        for source in self.config.rss_sources.clone().unwrap_or_default() {
-            let digest = self.fetch(&source, reverse, conn).await?;
+        for source in self
+            .config
+            .rss_sources
+            .clone()
+            .expect("No RSS sources found")
+        {
+            let digest = self.fetch(&source, reverse).await?;
             // Send an email with the digest if it's not empty
             if !digest.is_empty() {
                 // send the digest to the email address in the config, if given
@@ -106,12 +110,48 @@ impl Fetch for RssFetcher {
         }
         Ok(total_fetched)
     }
+
+    fn get_ids_to_pull(&self, source_name: &str, prefetched_ids: Vec<i64>) -> Vec<i64> {
+        let existing_ids = self.storage.query_ids(source_name);
+        let ids_to_pull: Vec<i64> = prefetched_ids
+            .into_iter()
+            .filter(|item_id| !existing_ids.contains(item_id))
+            .collect();
+
+        ids_to_pull
+    }
+
+    fn store_items(
+        &mut self,
+        source: &str,
+        items: &[DigestItem],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let records: Vec<Record> = items
+            .iter()
+            .map(|item| Record {
+                id: item.id,
+                source: source.to_string(),
+                created_at: chrono::Utc::now().timestamp(),
+            })
+            .collect();
+        match self.storage.insert_items(&records) {
+            Ok(()) => {
+                self.storage.dump()?;
+                Ok(())
+            }
+            Err(e) => Err(Box::new(e)),
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::{AppConfig, RssFetcher};
-    use crate::{feeds::prelude::FeedItem, ItemFilter};
+    use crate::{
+        feeds::prelude::FeedItem,
+        storage::{FileStorage, Storage},
+        ItemFilter,
+    };
     use tokio::test;
 
     #[test]
@@ -131,8 +171,8 @@ mod test {
 
         // Filter with direct filtering first
         let mut reverse = false;
-
-        let fetcher = RssFetcher::new(&config);
+        let storage = Storage::from_fs(tempfile::tempfile().unwrap());
+        let fetcher = RssFetcher::new(&config, storage);
         let pulled_items: Vec<FeedItem> = vec![
             FeedItem {
                 id: 123,

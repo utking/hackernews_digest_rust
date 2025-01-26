@@ -1,13 +1,14 @@
 use crate::{
     common::{deduplicate, is_missing_url},
     config,
-    storage::{self, FileStorage, Storage},
+    storage::{FileStorage, Record, Storage},
     DigestItem, Fetch, Filters, JsonNewsItem, Regex, Url,
 };
 use config::AppConfig;
 
 pub struct HNFetcher {
     pub config: AppConfig,
+    storage: Storage,
     api_base_url: String,
     filters: Vec<Regex>,
 }
@@ -15,22 +16,20 @@ pub struct HNFetcher {
 impl HNFetcher {
     #[must_use]
     /// Create a new fetcher with the given configuration
-    pub fn new(config: &AppConfig) -> HNFetcher {
+    pub fn new(config: &AppConfig, storage: Storage) -> HNFetcher {
         const API_BASE_URL: &str = "https://hacker-news.firebaseio.com/v0";
         Self {
             config: config.clone(),
             filters: Filters::compile(&config.filters),
             api_base_url: API_BASE_URL.to_string(),
+            storage,
         }
     }
 
     #[allow(dead_code)]
-    fn with_base_url(&self, base_url: String) -> Self {
-        Self {
-            config: self.config.clone(),
-            filters: self.filters.clone(),
-            api_base_url: base_url,
-        }
+    fn with_base_url(&mut self, base_url: String) -> &mut Self {
+        self.api_base_url = base_url;
+        self
     }
 
     /// Fetch not previously fetched news items from the API. For that, we need to:
@@ -41,15 +40,14 @@ impl HNFetcher {
     /// 4. Store the news items in the database
     /// 5. Return the digest of new items fetched
     async fn fetch(
-        &self,
+        &mut self,
         reverse: bool,
-        mut conn: &mut Storage,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
         let mut skipped = Vec::new();
 
         let prefetched = self.prefetch().await?;
-        let ids_to_pull = crate::get_ids_to_pull("hackernews", prefetched, &mut conn);
+        let ids_to_pull = self.get_ids_to_pull("hackernews", prefetched);
 
         for id in ids_to_pull {
             let news_item = self.fetch_news_item(id).await?;
@@ -97,9 +95,9 @@ impl HNFetcher {
         }
 
         // Store the skipped news items in the database
-        crate::store_news_items(&skipped, &mut conn)?;
+        self.store_items("", &skipped)?;
         // Store the news items in the database
-        crate::store_news_items(&digest, &mut conn)?;
+        self.store_items("", &digest)?;
 
         Ok(deduplicate(&digest))
     }
@@ -163,10 +161,8 @@ impl Fetch for HNFetcher {
     /// Run the fetcher with the given operation. The operation can be either fetching
     /// new news items or vacuuming the database. Return the number of items fetched.
     /// If digest is not empty, send an email with the digest to the email address in the config.
-    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
-        let conn = &mut storage::Storage::from_file(&self.config.db_dsn);
-
-        let digest = self.fetch(reverse, conn).await?;
+    async fn run(&mut self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
+        let digest = self.fetch(reverse).await?;
         // Send an email with the digest if it's not empty
         if !digest.is_empty() {
             // send the digest to the email address in the config, if given
@@ -177,6 +173,38 @@ impl Fetch for HNFetcher {
         }
         Ok(digest.len())
     }
+
+    fn store_items(
+        &mut self,
+        _source: &str,
+        items: &[DigestItem],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let records: Vec<Record> = items
+            .iter()
+            .map(|item| Record {
+                id: item.id,
+                source: "hackernews".to_string(),
+                created_at: item.created_at,
+            })
+            .collect();
+        match self.storage.insert_items(&records) {
+            Ok(()) => {
+                self.storage.dump()?;
+                Ok(())
+            }
+            Err(e) => Err(Box::new(e)),
+        }
+    }
+
+    fn get_ids_to_pull(&self, source_name: &str, prefetched_ids: Vec<i64>) -> Vec<i64> {
+        let existing_ids = self.storage.query_ids(source_name);
+        let ids_to_pull: Vec<i64> = prefetched_ids
+            .into_iter()
+            .filter(|item_id| !existing_ids.contains(item_id))
+            .collect();
+
+        ids_to_pull
+    }
 }
 
 #[cfg(test)]
@@ -184,7 +212,8 @@ mod test {
     use super::{config::AppConfig, Fetch, HNFetcher};
     use crate::{
         common::{deduplicate, is_missing_url},
-        storage, DigestItem, ItemFilter,
+        storage::{self, FileStorage},
+        DigestItem, Filters, ItemFilter,
     };
     use tokio::test;
 
@@ -249,7 +278,8 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::HNFetcher::new(&config);
+        let storage = storage::Storage::from_fs(tempfile::tempfile().unwrap());
+        let fetcher = crate::HNFetcher::new(&config, storage);
 
         assert_eq!(
             pulled_items
@@ -286,7 +316,9 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
+        let storage = storage::Storage::from_fs(tempfile::tempfile().unwrap());
+        let mut fetcher = crate::HNFetcher::new(&config, storage);
+        let fetcher = fetcher.with_base_url(expected_addr_str);
 
         let ids = fetcher.prefetch().await.unwrap();
         prefetch_mock.assert();
@@ -332,7 +364,11 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
+        let mut fetcher = crate::HNFetcher::new(
+            &config,
+            storage::Storage::from_fs(tempfile::tempfile().unwrap()),
+        );
+        let fetcher = fetcher.with_base_url(expected_addr_str);
         let item = fetcher.fetch_news_item(111).await.unwrap();
         prefetch_mock.assert();
         let digest_item: DigestItem = item.into();
@@ -383,16 +419,20 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
+        let mut fetcher = crate::HNFetcher::new(
+            &config,
+            storage::Storage::from_fs(tempfile::tempfile().unwrap()),
+        );
+        let fetcher = &mut fetcher.with_base_url(expected_addr_str);
 
-        let mut conn = storage::FileStorage::from_file(&config.db_dsn);
         // store the pulled items in the database to have IDs to pull
-        crate::store_news_items(&pulled_items, &mut conn).unwrap();
+        // crate::store_news_items(&pulled_items, &mut storage).unwrap();
+        fetcher.store_items("hackernews", &pulled_items).unwrap();
 
         let prefetched = fetcher.prefetch().await.unwrap();
         prefetch_mock.assert();
 
-        let ids_to_pull = crate::get_ids_to_pull("hackernews", prefetched, &mut conn);
+        let ids_to_pull = fetcher.get_ids_to_pull("hackernews", prefetched);
         assert_eq!(ids_to_pull.len(), 3, "Pulling IDs from DB failed");
         assert_eq!(ids_to_pull, vec![3, 4, 5], "Pulling IDs from DB failed");
     }
@@ -450,7 +490,11 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let fetcher = HNFetcher::new(&config).with_base_url(expected_addr_str);
+        let mut fetcher = HNFetcher::new(
+            &config,
+            storage::Storage::from_fs(tempfile::tempfile().unwrap()),
+        );
+        let fetcher = fetcher.with_base_url(expected_addr_str);
         let num_fetched = fetcher.run(false).await.unwrap();
 
         prefetch_mock.assert();
@@ -513,7 +557,11 @@ mod test {
             blacklisted_domains: vec![],
         };
 
-        let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
+        let mut fetcher = crate::HNFetcher::new(
+            &config,
+            storage::Storage::from_fs(tempfile::tempfile().unwrap()),
+        );
+        let fetcher = fetcher.with_base_url(expected_addr_str);
         let num_fetched = fetcher.run(true).await.unwrap();
 
         prefetch_mock.assert();
@@ -576,7 +624,10 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };
-        let fetcher = crate::HNFetcher::new(&config);
+        let mut fetcher = crate::HNFetcher::new(
+            &config,
+            storage::Storage::from_fs(tempfile::tempfile().unwrap()),
+        );
 
         assert_eq!(
             pulled_items
@@ -591,13 +642,16 @@ mod test {
             value: "some\\b".to_string(),
             title: "PLs".to_string(),
         }];
+        fetcher.filters = Filters::compile(&config.filters);
 
-        let fetcher = crate::HNFetcher::new(&config);
+        let filtered = pulled_items.iter().filter(|i| {
+            let keep = fetcher.keep_item(&i.news_title, false);
+            dbg!(&i.news_title, keep);
+            keep
+        });
+
         assert_eq!(
-            pulled_items
-                .iter()
-                .filter(|i| fetcher.keep_item(&i.news_title, false))
-                .count(),
+            filtered.count(),
             2,
             "Filtering items against a regex filter failed",
         );
@@ -695,7 +749,11 @@ mod test {
                 "email_to": ""
             }
             "#).unwrap();
-        let fetcher = crate::HNFetcher::new(&config);
+
+        let fetcher = crate::HNFetcher::new(
+            &config,
+            storage::Storage::from_fs(tempfile::tempfile().unwrap()),
+        );
 
         assert_eq!(fetcher.config.filters.len(), 29, "Filters count is wrong");
         assert_eq!(fetcher.filters.len(), 105, "Parsed filters count is wrong");

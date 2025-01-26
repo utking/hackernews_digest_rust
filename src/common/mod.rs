@@ -9,7 +9,13 @@ pub enum FetcherType {
 }
 
 pub trait Fetch {
-    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>>;
+    async fn run(&mut self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>>;
+    fn store_items(
+        &mut self,
+        source: &str,
+        items: &[DigestItem],
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn get_ids_to_pull(&self, source_name: &str, prefetched_ids: Vec<i64>) -> Vec<i64>;
 }
 
 /// De-duplicate the fetched items and return the unique items. URL is used as the key.
