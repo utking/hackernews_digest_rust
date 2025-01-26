@@ -9,7 +9,7 @@ argparse = "=0.2.2"
 chrono = "0.4.39"
 diesel = { version = "2.2.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "mysql"] }
 dotenvy = "0.15"
-lettre = "0.10"
+lettre = "~0.11"
 lettre_email = "0.9"
 regex = "1.11.1"
 reqwest = { version = "0.12", features = ["json"] }
