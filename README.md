@@ -1,20 +1,10 @@
 ## Rust version of HackerNews Digest
 
-### Requirements
-
-* Sqlite 3
-* MySQL
-
 ### Configuration
 
 There is a default config-file name - `config.json`. Note that it can be overwritten in the comman line (-c|--config). The path can be relative or absolute.
 
 To create a config file, copy `config.example.json` to `config.json` (or any other name that seems right for you) and adjust what you think should be adjusted.
-
-Database connection agreement:
-
-* For `sqlite3`, the Database DSN string must contain the name of the DB file (i.e., `./news.db`).
-* For `mysql`, the DSN must be in the form of `mysql://user:password@host:port/db-name`. See https://docs.diesel.rs/2.1.x/diesel/mysql/struct.MysqlConnection.html for additional options. (!) libmysqlclient must be installed in the systemd for Mysql backend to work.
 
 #### Digest output
 

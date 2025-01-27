@@ -1,4 +1,6 @@
-use crate::{config::AppConfig, establish_connection, run_migrations, AnyConnection};
+use diesel::SqliteConnection;
+
+use crate::{config::AppConfig, establish_connection, run_migrations};
 
 pub struct Vacuum {
     config: AppConfig,
@@ -13,7 +15,7 @@ impl Vacuum {
     }
 
     pub fn run(&self) -> Result<usize, Box<dyn std::error::Error>> {
-        let mut conn = establish_connection(&self.config.db_dsn);
+        let mut conn = establish_connection(&self.config.get_db_file());
 
         match run_migrations(&mut conn) {
             Ok(()) => {}
@@ -21,13 +23,11 @@ impl Vacuum {
         }
 
         let num_deleted = self.vacuum(&mut conn)?;
-
         Ok(num_deleted)
     }
 
-    fn vacuum(&self, conn: &mut AnyConnection) -> Result<usize, Box<dyn std::error::Error>> {
+    fn vacuum(&self, conn: &mut SqliteConnection) -> Result<usize, Box<dyn std::error::Error>> {
         let num_deleted = crate::vacuum(self.config.purge_after_days, conn)?;
-
         Ok(num_deleted)
     }
 }

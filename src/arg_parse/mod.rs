@@ -1,6 +1,6 @@
 use std::io::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CmdArgs {
     pub config: String,
     pub reverse: bool,
@@ -20,22 +20,22 @@ impl CmdArgs {
             ap.refer(&mut config).add_option(
                 &["-c", "--config"],
                 argparse::Store,
-                "Config file path",
+                "Config file path; default is config.json",
             );
             ap.refer(&mut reverse).add_option(
                 &["-r", "--reverse"],
                 argparse::StoreTrue,
-                "Reverse the order of the posts",
+                "Reverse the filters results - exclude instead of include",
             );
             ap.refer(&mut vacuum).add_option(
                 &["-v", "--vacuum"],
                 argparse::StoreTrue,
-                "Vacuum the database",
+                "Vacuum the database of older items",
             );
             ap.refer(&mut feeds_only).add_option(
                 &["-f", "--feeds-only"],
                 argparse::StoreTrue,
-                "Fetch only feeds",
+                "Fetch only RSS feeds",
             );
 
             match ap.parse(args, &mut std::io::stdout(), &mut std::io::stderr()) {

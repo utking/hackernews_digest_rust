@@ -1,39 +1,39 @@
 use crate::{
     sender::{DummySender, Sender, SmtpSender, TelegramSender},
-    Deserialize, ItemFilter, Serialize,
+    Deserialize, ItemFilter,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+const DEFAULT_DB_FILE: &str = "./db.sqlite3";
+
+#[derive(Clone, Deserialize)]
 pub struct SmtpConfig {
     pub from: String,
     pub to: String,
     pub host: String,
     pub password: String,
-    pub port: u16,
     pub subject: String,
-    pub use_ssl: bool,
-    pub use_tls: bool,
     pub username: String,
+    // pub port: u16,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize)]
 pub struct TelegramConfig {
     pub token: String,
     pub chat_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize)]
 pub struct RssSource {
     pub url: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize)]
 pub struct AppConfig {
     pub blacklisted_domains: Vec<String>,
-    pub db_dsn: String,
+    pub db_file: Option<String>,
     pub filters: Vec<ItemFilter>,
-    pub purge_after_days: usize,
+    pub purge_after_days: i64,
     pub smtp: Option<SmtpConfig>,
     pub telegram: Option<TelegramConfig>,
     pub rss_sources: Option<Vec<RssSource>>,
@@ -62,5 +62,11 @@ impl AppConfig {
         } else {
             Sender::Dummy(DummySender {})
         }
+    }
+
+    pub fn get_db_file(&self) -> String {
+        self.db_file
+            .clone()
+            .unwrap_or_else(|| DEFAULT_DB_FILE.to_string())
     }
 }
