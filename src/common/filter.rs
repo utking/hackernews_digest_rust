@@ -1,8 +1,8 @@
-use crate::{Deserialize, Regex, RegexBuilder, Serialize};
+use crate::{Deserialize, Regex, RegexBuilder};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize)]
 pub struct ItemFilter {
-    pub title: String,
+    // pub title: String,
     pub value: String,
 }
 

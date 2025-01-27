@@ -1,9 +1,10 @@
+use diesel::SqliteConnection;
 use regex::Regex;
 use rss::Channel;
 
 use crate::{
     config::{AppConfig, RssSource},
-    establish_connection, run_migrations, AnyConnection, DigestItem, Fetch, Filters,
+    establish_connection, run_migrations, DigestItem, Fetch, Filters,
 };
 
 use super::prelude::FeedItem;
@@ -36,10 +37,10 @@ impl RssFetcher {
         for item in news_items {
             if self.keep_item(&item.title.clone(), reverse) {
                 items.push(DigestItem {
-                    id: item.id as i32,
+                    id: item.id,
                     news_title: item.title,
                     news_url: item.guid,
-                    created_at: item.created_at as i32,
+                    created_at: item.created_at,
                 });
             }
         }
@@ -52,11 +53,11 @@ impl RssFetcher {
         &self,
         source: &RssSource,
         reverse: bool,
-        mut conn: &mut AnyConnection,
+        mut conn: &mut SqliteConnection,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
         let prefetched_items = self.pull_feed_items(&source.url, reverse).await?;
-        let items_ids: Vec<i32> = prefetched_items.iter().map(|item| item.id).collect();
+        let items_ids: Vec<i64> = prefetched_items.iter().map(|item| item.id).collect();
 
         // Get the items that are not already in the database
         let ids_to_pull = crate::get_ids_to_pull(&source.name, items_ids, &mut conn);
@@ -88,7 +89,7 @@ impl RssFetcher {
 
 impl Fetch for RssFetcher {
     async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
-        let mut conn = establish_connection(&self.config.db_dsn);
+        let mut conn = establish_connection(&self.config.get_db_file());
         let conn_arg = &mut conn;
         match run_migrations(conn_arg) {
             Ok(()) => {}
@@ -121,10 +122,9 @@ mod test {
     #[test]
     async fn test_filter_fetched() {
         let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![ItemFilter {
                 value: "rust,python".to_string(),
-                title: "PLs".to_string(),
             }],
             smtp: None,
             telegram: None,
@@ -143,24 +143,24 @@ mod test {
                 title: "Python is a programming language".to_string(),
                 guid: "https://example.com/items/123".to_string(),
                 created_at: 0,
-                description: String::from("Some description"),
-                categories: vec![String::from("Python")],
+                // description: String::from("Some description"),
+                // categories: vec![String::from("Python")],
             },
             FeedItem {
                 id: 202,
                 title: "Rust is cool".to_string(),
                 guid: "https://example.com/items/202".to_string(),
                 created_at: 0,
-                description: String::from("Some description"),
-                categories: vec![String::from("Rust")],
+                // description: String::from("Some description"),
+                // categories: vec![String::from("Rust")],
             },
             FeedItem {
                 id: 303,
                 title: "1C is not cool".to_string(),
                 guid: "https://example.com/items/303".to_string(),
                 created_at: 0,
-                description: String::from("Some description"),
-                categories: vec![String::from("1C")],
+                // description: String::from("Some description"),
+                // categories: vec![String::from("1C")],
             },
         ];
 

@@ -1,6 +1,6 @@
 {
   "purge_after_days": 30,
-  "db_dsn": "db.sqlite3", // or "db_dsn": "mysql://digest:somesecret@172.21.0.2:3306/news_db",
+  "db_file": "db.sqlite3", // optional
   "blacklisted_domains": [
     "www.businessinsider.com"
   ],
@@ -26,7 +26,7 @@
     {"title": "Python", "value": "\\bpython"},
     {"title": "CPU/GPU", "value": "\\bintel\\b,\\bamd\\b"}
   ],
-  "rss_sources": [
+  "rss_sources": [ // optional
     {
       "url": "https://habr.com/ru/rss/articles/?with_tags=true&limit=10",
       "name": "Habr Ru"
@@ -36,18 +36,16 @@
       "name": "Habr En"
     }
   ],
-  "smtp": {
+  "smtp": { // optional
     "host": "localhost",
     "port": 1025,
     "subject": "HackerNews Digest",
     "to": "to@example.com",
     "from": "HackerNews Digest <hackernews-no-reply@example.com>",
     "username": null,
-    "password": null,
-    "use_tls": true,
-    "use_ssl": false
+    "password": null
   },
-  "telegram": {
+  "telegram": { // optional
     "chat_id": "123456",
     "token": "6236243:cvbsSghsdFbskm-sfgJNiunidvJ"
   }

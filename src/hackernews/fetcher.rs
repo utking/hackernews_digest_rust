@@ -1,9 +1,10 @@
 use crate::{
     common::{deduplicate, is_missing_url},
-    config, establish_connection, run_migrations, AnyConnection, DigestItem, Fetch, Filters,
-    JsonNewsItem, Regex, Url,
+    config, establish_connection, run_migrations, DigestItem, Fetch, Filters, JsonNewsItem, Regex,
+    Url,
 };
 use config::AppConfig;
+use diesel::SqliteConnection;
 
 pub struct HNFetcher {
     pub config: AppConfig,
@@ -42,7 +43,7 @@ impl HNFetcher {
     async fn fetch(
         &self,
         reverse: bool,
-        mut conn: &mut AnyConnection,
+        mut conn: &mut SqliteConnection,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
         let mut skipped = Vec::new();
@@ -115,17 +116,17 @@ impl HNFetcher {
     }
 
     /// Fetch the top stories' IDs from the API
-    async fn prefetch(&self) -> Result<Vec<i32>, Box<dyn std::error::Error>> {
+    async fn prefetch(&self) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
         let result = reqwest::get(format!("{}/topstories.json", self.api_base_url))
             .await?
-            .json::<Vec<i32>>()
+            .json::<Vec<i64>>()
             .await?;
 
         Ok(result)
     }
 
     /// Fetch a single news item by its ID
-    async fn fetch_news_item(&self, id: i32) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
+    async fn fetch_news_item(&self, id: i64) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
         let result = reqwest::get(format!("{}/item/{id}.json", self.api_base_url))
             .await?
             .json::<JsonNewsItem>()
@@ -163,7 +164,7 @@ impl Fetch for HNFetcher {
     /// new news items or vacuuming the database. Return the number of items fetched.
     /// If digest is not empty, send an email with the digest to the email address in the config.
     async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
-        let mut conn = establish_connection(&self.config.db_dsn);
+        let mut conn = establish_connection(&self.config.get_db_file());
         let conn_arg = &mut conn;
         match run_migrations(conn_arg) {
             Ok(()) => {}
@@ -243,10 +244,9 @@ mod test {
             },
         ];
         let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
-                title: "PLs".to_string(),
             }],
             smtp: None,
             telegram: None,
@@ -280,10 +280,9 @@ mod test {
         });
 
         let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
-                title: "PLs".to_string(),
             }],
             smtp: None,
             telegram: None,
@@ -325,10 +324,9 @@ mod test {
         });
 
         let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
-                title: "PLs".to_string(),
             }],
             smtp: None,
             telegram: None,
@@ -377,10 +375,9 @@ mod test {
                 .body("[1, 2, 3, 4, 5]");
         });
         let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![ItemFilter {
                 value: "rust".to_string(),
-                title: "PLs".to_string(),
             }],
             smtp: None,
             telegram: None,
@@ -390,7 +387,7 @@ mod test {
         };
         let fetcher = crate::HNFetcher::new(&config).with_base_url(expected_addr_str);
 
-        let mut conn = crate::establish_connection(&config.db_dsn);
+        let mut conn = crate::establish_connection(&config.get_db_file());
         // apply migrations
         run_migrations(&mut conn).unwrap();
         // store the pulled items in the database to have IDs to pull
@@ -445,10 +442,9 @@ mod test {
         });
 
         let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![ItemFilter {
                 value: ".*".to_string(), // match all
-                title: "PLs".to_string(),
             }],
             smtp: None,
             telegram: None,
@@ -508,10 +504,9 @@ mod test {
         });
 
         let config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![ItemFilter {
                 value: "item".to_string(),
-                title: "PLs".to_string(),
             }],
             smtp: None,
             telegram: None,
@@ -566,15 +561,13 @@ mod test {
             },
         ];
         let mut config = AppConfig {
-            db_dsn: ":memory:".to_string(),
+            db_file: Some(":memory:".to_string()),
             filters: vec![
                 ItemFilter {
                     value: "cool".to_string(),
-                    title: "PLs".to_string(),
                 },
                 ItemFilter {
                     value: "awesome".to_string(),
-                    title: "PLs".to_string(),
                 },
             ],
             smtp: None,
@@ -596,7 +589,6 @@ mod test {
 
         config.filters = vec![ItemFilter {
             value: "some\\b".to_string(),
-            title: "PLs".to_string(),
         }];
 
         let fetcher = crate::HNFetcher::new(&config);
@@ -648,7 +640,6 @@ mod test {
         let config = AppConfig::from_str(
             r#"{
                 "purge_after_days": 720,
-                "db_dsn": "hackernews_db.sqlite",
                 "blacklisted_domains": [
                     "www.businessinsider.com",
                     "www.nytimes.com",
