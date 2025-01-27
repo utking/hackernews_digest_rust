@@ -1,3 +1,5 @@
+use regex::Regex;
+
 use crate::{feeds::prelude::RssFetcher, DigestItem, HNFetcher};
 
 mod filter;
@@ -9,7 +11,17 @@ pub enum FetcherType {
 }
 
 pub trait Fetch {
-    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>>;
+    async fn run(&mut self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>>;
+    fn get_filters(&self) -> &Vec<Regex>;
+    fn keep_item(&self, title: &str, reverse: bool) -> bool {
+        let keep: bool = reverse;
+        for filter in self.get_filters() {
+            if filter.is_match(title) {
+                return !reverse;
+            }
+        }
+        keep
+    }
 }
 
 /// De-duplicate the fetched items and return the unique items. URL is used as the key.

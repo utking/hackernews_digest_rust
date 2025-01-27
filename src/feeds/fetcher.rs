@@ -1,10 +1,9 @@
-use diesel::SqliteConnection;
 use regex::Regex;
 use rss::Channel;
 
 use crate::{
     config::{AppConfig, RssSource},
-    establish_connection, run_migrations, DigestItem, Fetch, Filters,
+    DigestItem, Fetch, Filters, Storage,
 };
 
 use super::prelude::FeedItem;
@@ -12,15 +11,17 @@ use super::prelude::FeedItem;
 pub struct RssFetcher {
     config: AppConfig,
     filters: Vec<Regex>,
+    storage: Storage,
 }
 
 impl RssFetcher {
     /// Create a new fetcher
     #[must_use]
-    pub fn new(config: &AppConfig) -> RssFetcher {
+    pub fn new(config: &AppConfig, storage: Storage) -> RssFetcher {
         Self {
             config: config.clone(),
             filters: Filters::compile(&config.filters),
+            storage,
         }
     }
 
@@ -50,17 +51,16 @@ impl RssFetcher {
 
     /// Fetch the latest news from the Habr API
     async fn fetch(
-        &self,
+        &mut self,
         source: &RssSource,
         reverse: bool,
-        mut conn: &mut SqliteConnection,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
         let prefetched_items = self.pull_feed_items(&source.url, reverse).await?;
         let items_ids: Vec<i64> = prefetched_items.iter().map(|item| item.id).collect();
 
         // Get the items that are not already in the database
-        let ids_to_pull = crate::get_ids_to_pull(&source.name, items_ids, &mut conn);
+        let ids_to_pull = self.storage.get_ids_to_pull(&source.name, items_ids);
         // Compile a digest from the items that are not in the database yet
         for id in ids_to_pull {
             let item = prefetched_items.iter().find(|item| item.id == id);
@@ -70,35 +70,17 @@ impl RssFetcher {
         }
 
         // Store the news items in the database
-        crate::store_feed_items(&source.name, &digest, &mut conn)?;
+        self.storage.store_feed_items(&source.name, &digest)?;
 
         Ok(digest)
-    }
-
-    /// Keep an item based on the filters. If reverse is true, keep the item if it doesn't match
-    fn keep_item(&self, title: &str, reverse: bool) -> bool {
-        let keep: bool = reverse;
-        for filter in &self.filters {
-            if filter.is_match(title) {
-                return !reverse;
-            }
-        }
-        keep
     }
 }
 
 impl Fetch for RssFetcher {
-    async fn run(&self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
-        let mut conn = establish_connection(&self.config.get_db_file());
-        let conn_arg = &mut conn;
-        match run_migrations(conn_arg) {
-            Ok(()) => {}
-            Err(e) => eprintln!("Error running migrations: {e}"),
-        }
-
+    async fn run(&mut self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
         let mut total_fetched = 0;
         for source in self.config.rss_sources.clone().unwrap_or_default() {
-            let digest = self.fetch(&source, reverse, conn_arg).await?;
+            let digest = self.fetch(&source, reverse).await?;
             // Send an email with the digest if it's not empty
             if !digest.is_empty() {
                 // send the digest to the email address in the config, if given
@@ -111,12 +93,16 @@ impl Fetch for RssFetcher {
         }
         Ok(total_fetched)
     }
+
+    fn get_filters(&self) -> &Vec<Regex> {
+        &self.filters
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::{AppConfig, RssFetcher};
-    use crate::{feeds::prelude::FeedItem, ItemFilter};
+    use crate::{feeds::prelude::FeedItem, Fetch, ItemFilter, Storage};
     use tokio::test;
 
     #[test]
@@ -135,8 +121,9 @@ mod test {
 
         // Filter with direct filtering first
         let mut reverse = false;
-
-        let fetcher = RssFetcher::new(&config);
+        let conn = Storage::establish_connection(":memory:");
+        let storage = Storage::new(conn);
+        let fetcher = RssFetcher::new(&config, storage);
         let pulled_items: Vec<FeedItem> = vec![
             FeedItem {
                 id: 123,
