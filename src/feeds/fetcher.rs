@@ -32,7 +32,8 @@ impl RssFetcher {
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let content = reqwest::get(source_url).await?.bytes().await?;
         let channel = Channel::read_from(&content[..])?;
-        let news_items: Vec<FeedItem> = channel.items().iter().map(FeedItem::from).collect();
+        let news_items: Vec<FeedItem> =
+            channel.items().iter().map(FeedItem::from).collect();
 
         let mut items = Vec::new();
         for item in news_items {
@@ -56,18 +57,22 @@ impl RssFetcher {
         reverse: bool,
     ) -> Result<Vec<DigestItem>, Box<dyn std::error::Error>> {
         let mut digest = Vec::new();
-        let prefetched_items = self.pull_feed_items(&source.url, reverse).await?;
-        let items_ids: Vec<i64> = prefetched_items.iter().map(|item| item.id).collect();
+        let prefetched_items =
+            self.pull_feed_items(&source.url, reverse).await?;
+        let items_ids: Vec<i64> =
+            prefetched_items.iter().map(|item| item.id).collect();
 
         // Get the items that are not already in the database
-        let ids_to_pull = self.storage.get_ids_to_pull(&source.name, items_ids);
-        // Compile a digest from the items that are not in the database yet
-        for id in ids_to_pull {
-            let item = prefetched_items.iter().find(|item| item.id == id);
-            if let Some(item) = item {
-                digest.push(item.clone());
-            }
-        }
+        self.storage
+            .get_ids_to_pull(&source.name, items_ids)
+            // Compile a digest from the items that are not in the database yet
+            .iter()
+            .for_each(|id| {
+                let item = prefetched_items.iter().find(|item| item.id == *id);
+                if let Some(item) = item {
+                    digest.push(item.clone());
+                }
+            });
 
         // Store the news items in the database
         self.storage.store_feed_items(&source.name, &digest)?;
@@ -77,7 +82,10 @@ impl RssFetcher {
 }
 
 impl Fetch for RssFetcher {
-    async fn run(&mut self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
+    async fn run(
+        &mut self,
+        reverse: bool,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
         let mut total_fetched = 0;
         for source in self.config.rss_sources.clone().unwrap_or_default() {
             let digest = self.fetch(&source, reverse).await?;

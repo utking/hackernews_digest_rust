@@ -39,7 +39,8 @@ impl HNFetcher {
         let mut skipped = Vec::new();
 
         let prefetched = self.prefetch().await?;
-        let ids_to_pull = self.storage.get_ids_to_pull("hackernews", prefetched);
+        let ids_to_pull =
+            self.storage.get_ids_to_pull("hackernews", prefetched);
 
         for id in ids_to_pull {
             let news_item = &self.fetch_news_item(id).await?;
@@ -96,20 +97,25 @@ impl HNFetcher {
 
     /// Fetch the top stories' IDs from the API
     async fn prefetch(&self) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
-        let result = reqwest::get(format!("{}/topstories.json", self.api_base_url))
-            .await?
-            .json::<Vec<i64>>()
-            .await?;
+        let result =
+            reqwest::get(format!("{}/topstories.json", self.api_base_url))
+                .await?
+                .json::<Vec<i64>>()
+                .await?;
 
         Ok(result)
     }
 
     /// Fetch a single news item by its ID
-    async fn fetch_news_item(&self, id: i64) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
-        let result = reqwest::get(format!("{}/item/{id}.json", self.api_base_url))
-            .await?
-            .json::<JsonNewsItem>()
-            .await?;
+    async fn fetch_news_item(
+        &self,
+        id: i64,
+    ) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
+        let result =
+            reqwest::get(format!("{}/item/{id}.json", self.api_base_url))
+                .await?
+                .json::<JsonNewsItem>()
+                .await?;
 
         Ok(result)
     }
@@ -121,20 +127,18 @@ impl HNFetcher {
         }
 
         match Url::parse(url) {
-            Ok(parsed_url) => match parsed_url.domain() {
-                Some(domain) => {
-                    for blacklisted_domain in &self.config.blacklisted_domains {
-                        if domain == blacklisted_domain {
-                            return true;
-                        }
+            Ok(parsed_url) => {
+                match parsed_url.domain() {
+                    Some(domain) => {
+                        return self.config.blacklisted_domains.iter().any(
+                            |blacklisted_domain| domain == blacklisted_domain,
+                        )
                     }
+                    None => return false,
                 }
-                None => return false,
-            },
+            }
             Err(_) => return false,
         }
-
-        false
     }
 }
 
@@ -142,7 +146,10 @@ impl Fetch for HNFetcher {
     /// Run the fetcher with the given operation. The operation can be either fetching
     /// new news items or vacuuming the database. Return the number of items fetched.
     /// If digest is not empty, send an email with the digest to the email address in the config.
-    async fn run(&mut self, reverse: bool) -> Result<usize, Box<dyn std::error::Error>> {
+    async fn run(
+        &mut self,
+        reverse: bool,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
         let digest = self.fetch(reverse).await?;
         // Send an email with the digest if it's not empty
         if !digest.is_empty() {
@@ -231,7 +238,9 @@ mod test {
         };
         let fetcher = crate::HNFetcher::new(
             &config,
-            crate::Storage::new(Storage::establish_connection(&config.get_db_file())),
+            crate::Storage::new(Storage::establish_connection(
+                &config.get_db_file(),
+            )),
         );
 
         assert_eq!(
@@ -268,7 +277,8 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let mut fetcher = crate::HNFetcher::new(&config, storage);
         fetcher.api_base_url = expected_addr_str;
 
@@ -315,7 +325,8 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let mut fetcher = crate::HNFetcher::new(&config, storage);
         fetcher.api_base_url = expected_addr_str;
 
@@ -368,7 +379,8 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![String::from("example.com")],
         };
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let mut fetcher = crate::HNFetcher::new(&config, storage);
         fetcher.api_base_url = expected_addr_str;
         // store the pulled items in the database to have IDs to pull
@@ -377,7 +389,8 @@ mod test {
         let prefetched = fetcher.prefetch().await.unwrap();
         prefetch_mock.assert();
 
-        let ids_to_pull = fetcher.storage.get_ids_to_pull("hackernews", prefetched);
+        let ids_to_pull =
+            fetcher.storage.get_ids_to_pull("hackernews", prefetched);
         assert_eq!(ids_to_pull.len(), 3, "Pulling IDs from DB failed");
         assert_eq!(ids_to_pull, vec![3, 4, 5], "Pulling IDs from DB failed");
     }
@@ -434,7 +447,8 @@ mod test {
             blacklisted_domains: vec![String::from("example.com")],
         };
 
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let mut fetcher = crate::HNFetcher::new(&config, storage);
         fetcher.api_base_url = expected_addr_str;
         let num_fetched = fetcher.run(false).await.unwrap();
@@ -498,7 +512,8 @@ mod test {
             blacklisted_domains: vec![],
         };
 
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let mut fetcher = crate::HNFetcher::new(&config, storage);
         fetcher.api_base_url = expected_addr_str;
         let num_fetched = fetcher.run(true).await.unwrap();
@@ -561,7 +576,8 @@ mod test {
             purge_after_days: 7,
             blacklisted_domains: vec![],
         };
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let fetcher = crate::HNFetcher::new(&config, storage);
 
         assert_eq!(
@@ -577,7 +593,8 @@ mod test {
             value: "some\\b".to_string(),
         }];
 
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let fetcher = crate::HNFetcher::new(&config, storage);
 
         assert_eq!(
@@ -595,13 +612,15 @@ mod test {
     pub async fn test_filter_config_from_str() {
         let pulled_items = vec![
             DigestItem {
-                news_title: "So You Want to Build Your Own Data Center".to_string(),
+                news_title: "So You Want to Build Your Own Data Center"
+                    .to_string(),
                 news_url: "https://example.com".to_string(),
                 created_at: 1700000000,
                 id: 1,
             },
             DigestItem {
-                news_title: "Maze Generation: Recursive Division (2011)".to_string(),
+                news_title: "Maze Generation: Recursive Division (2011)"
+                    .to_string(),
                 news_url: "https://example.org".to_string(),
                 created_at: 1700000000,
                 id: 2,
@@ -619,7 +638,8 @@ mod test {
                 id: 4,
             },
             DigestItem {
-                news_title: "Bluesky accounts add 10k followers per day".to_string(),
+                news_title: "Bluesky accounts add 10k followers per day"
+                    .to_string(),
                 news_url: "https://example.org".to_string(),
                 created_at: 1700000000,
                 id: 5,
@@ -682,7 +702,8 @@ mod test {
                 "email_to": ""
             }
             "#).unwrap();
-        let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
+        let storage =
+            Storage::new(Storage::establish_connection(&config.get_db_file()));
         let fetcher = crate::HNFetcher::new(&config, storage);
 
         assert_eq!(fetcher.config.filters.len(), 29, "Filters count is wrong");

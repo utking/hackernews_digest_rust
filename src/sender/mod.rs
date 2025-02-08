@@ -76,11 +76,17 @@ impl DigestSender for SmtpSender {
                 MultiPart::mixed().multipart(
                     MultiPart::alternative()
                         .singlepart(SinglePart::plain(text_body))
-                        .multipart(MultiPart::related().singlepart(SinglePart::html(html_body))),
+                        .multipart(
+                            MultiPart::related()
+                                .singlepart(SinglePart::html(html_body)),
+                        ),
                 ),
             )?;
 
-        let creds = Credentials::new(self.config.username.clone(), self.config.password.clone());
+        let creds = Credentials::new(
+            self.config.username.clone(),
+            self.config.password.clone(),
+        );
         let mailer = SmtpTransport::relay(&self.config.host)?
             .credentials(creds)
             .build();
@@ -102,13 +108,13 @@ impl DigestSender for DummySender {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut body = String::from("Hi!\n\n");
 
-        for item in digest {
+        digest.iter().for_each(|item| {
             body.push_str(&format!(
                 "* {title} - {url}\n",
                 url = item.news_url,
                 title = item.news_title
             ));
-        }
+        });
         body.push_str(format!("\nGenerated: {}", formatted_now()).as_str());
 
         println!("{body}");
@@ -154,14 +160,18 @@ impl DigestSender for TelegramSender {
 
 /// Convert a digest to an HTML string
 pub fn digest_to_html(digest: &[DigestItem]) -> String {
-    let mut body = String::from("<html><head>HackerNews Digest</head><body><p>Hi!</p><div><ul>");
-    for item in digest {
+    let mut body = String::from(
+        "<html><head>HackerNews Digest</head><body><p>Hi!</p><div><ul>",
+    );
+
+    digest.iter().for_each(|item| {
         body.push_str(&format!(
             "<li><a href=\"{url}\">{title}</a></li>",
             url = item.news_url,
             title = item.news_title
         ));
-    }
+    });
+
     body.push_str(
         format!(
             "</ul></div><p>Generated: {}</p></body></html>",
@@ -175,13 +185,14 @@ pub fn digest_to_html(digest: &[DigestItem]) -> String {
 /// Convert a digest to a plain text string
 pub fn digest_to_text(digest: &[DigestItem]) -> String {
     let mut body = String::from("Hi!\n\n");
-    for item in digest {
+    digest.iter().for_each(|item| {
         body.push_str(&format!(
             "* {title} - {url}\n",
             url = item.news_url,
             title = item.news_title
         ));
-    }
+    });
+
     body.push_str(format!("\nGenerated: {}", formatted_now()).as_str());
     body
 }

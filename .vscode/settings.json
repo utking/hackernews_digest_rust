@@ -2,7 +2,7 @@
     "[rust]": {
         "editor.formatOnSave": true,
         "editor.selectionClipboard": false,
-        "editor.rulers": [80]
+        "editor.rulers": [100]
     },
     "editor.selectionClipboard": false
 }

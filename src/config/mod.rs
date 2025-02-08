@@ -40,7 +40,9 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn from_file(file_name: &String) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file(
+        file_name: &String,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let contents = std::fs::read_to_string(file_name)?;
         let config: AppConfig = serde_json::from_str(&contents)?;
 
@@ -48,7 +50,9 @@ impl AppConfig {
     }
 
     #[allow(dead_code)]
-    pub fn from_str(contents: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_str(
+        contents: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let config: AppConfig = serde_json::from_str(contents)?;
 
         Ok(config)

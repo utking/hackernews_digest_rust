@@ -13,11 +13,13 @@ impl Filters {
     pub fn compile(filters: &[ItemFilter]) -> Vec<Regex> {
         let string_filters: Vec<String> = filters
             .iter()
-            .flat_map(|f| f.value.split(',').map(std::string::ToString::to_string))
+            .flat_map(|f| {
+                f.value.split(',').map(std::string::ToString::to_string)
+            })
             .collect();
 
         let mut filters: Vec<Regex> = Vec::new();
-        for filter in string_filters {
+        string_filters.iter().for_each(|filter| {
             match RegexBuilder::new(&filter.to_lowercase())
                 .case_insensitive(true)
                 .build()
@@ -25,7 +27,7 @@ impl Filters {
                 Ok(re) => filters.push(re),
                 Err(e) => eprintln!("Error creating filter: {e}"),
             }
-        }
+        });
         filters
     }
 }
