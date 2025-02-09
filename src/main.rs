@@ -21,8 +21,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run the vacuum operation separately if requested
     if args.vacuum {
-        let num_deleted = Storage::new(Storage::establish_connection(&config.get_db_file()))
-            .vacuum(config.purge_after_days)?;
+        let num_deleted =
+            Storage::new(Storage::establish_connection(&config.get_db_file()))
+                .vacuum(config.purge_after_days)?;
         println!("Vacuumed {num_deleted} items");
         return Ok(());
     }
@@ -37,26 +38,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if !skip_hackernews {
-            let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
-            fetchers.push(FetcherType::HNFetcher(HNFetcher::new(&config, storage)));
+            let storage = Storage::new(Storage::establish_connection(
+                &config.get_db_file(),
+            ));
+            fetchers
+                .push(FetcherType::HNFetcher(HNFetcher::new(&config, storage)));
         }
     }
     // RssFetcher is optional, if the config has rss_sources then add it to the fetchers
     if let Some(sources) = &config.rss_sources {
         if !sources.is_empty() {
-            let storage = Storage::new(Storage::establish_connection(&config.get_db_file()));
-            fetchers.push(FetcherType::RssFetcher(RssFetcher::new(&config, storage)));
+            let storage = Storage::new(Storage::establish_connection(
+                &config.get_db_file(),
+            ));
+            fetchers.push(FetcherType::RssFetcher(RssFetcher::new(
+                &config, storage,
+            )));
         }
     }
 
     // Run the fetchers if there are any
     for fetcher in &mut fetchers {
-        let fetched_items = match fetcher {
-            FetcherType::HNFetcher(f) => f.run(args.reverse).await?,
-            FetcherType::RssFetcher(f) => f.run(args.reverse).await?,
+        let (fetched_items, fetch_type) = match fetcher {
+            FetcherType::HNFetcher(f) => {
+                (f.run(args.reverse).await?, "HackerNews")
+            }
+            FetcherType::RssFetcher(f) => (f.run(args.reverse).await?, "RSS"),
         };
 
-        println!("Fetched new items: {fetched_items}");
+        println!("Fetched new {fetch_type} items: {fetched_items}");
     }
 
     Ok(())
