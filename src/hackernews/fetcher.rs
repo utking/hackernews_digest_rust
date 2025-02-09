@@ -97,11 +97,11 @@ impl HNFetcher {
 
     /// Fetch the top stories' IDs from the API
     async fn prefetch(&self) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
-        let result =
-            reqwest::get(format!("{}/topstories.json", self.api_base_url))
-                .await?
-                .json::<Vec<i64>>()
-                .await?;
+        let prefetch_url = || format!("{}/topstories.json", self.api_base_url);
+        let result = reqwest::get(prefetch_url())
+            .await?
+            .json::<Vec<i64>>()
+            .await?;
 
         Ok(result)
     }
@@ -111,11 +111,12 @@ impl HNFetcher {
         &self,
         id: i64,
     ) -> Result<JsonNewsItem, Box<dyn std::error::Error>> {
-        let result =
-            reqwest::get(format!("{}/item/{id}.json", self.api_base_url))
-                .await?
-                .json::<JsonNewsItem>()
-                .await?;
+        let get_item_url =
+            |id| format!("{}/item/{}.json", self.api_base_url, id);
+        let result = reqwest::get(get_item_url(id))
+            .await?
+            .json::<JsonNewsItem>()
+            .await?;
 
         Ok(result)
     }
@@ -127,17 +128,15 @@ impl HNFetcher {
         }
 
         match Url::parse(url) {
-            Ok(parsed_url) => {
-                match parsed_url.domain() {
-                    Some(domain) => {
-                        return self.config.blacklisted_domains.iter().any(
-                            |blacklisted_domain| domain == blacklisted_domain,
-                        )
-                    }
-                    None => return false,
-                }
-            }
-            Err(_) => return false,
+            Ok(parsed_url) => match parsed_url.domain() {
+                Some(domain) => self
+                    .config
+                    .blacklisted_domains
+                    .iter()
+                    .any(|blacklisted_domain| domain == blacklisted_domain),
+                None => false,
+            },
+            Err(_) => false,
         }
     }
 }

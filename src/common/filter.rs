@@ -19,7 +19,7 @@ impl Filters {
             .collect();
 
         let mut filters: Vec<Regex> = Vec::new();
-        string_filters.iter().for_each(|filter| {
+        for filter in string_filters {
             match RegexBuilder::new(&filter.to_lowercase())
                 .case_insensitive(true)
                 .build()
@@ -27,7 +27,7 @@ impl Filters {
                 Ok(re) => filters.push(re),
                 Err(e) => eprintln!("Error creating filter: {e}"),
             }
-        });
+        }
         filters
     }
 }

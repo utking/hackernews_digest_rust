@@ -107,14 +107,18 @@ impl DigestSender for DummySender {
         digest: &[DigestItem],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut body = String::from("Hi!\n\n");
-
-        digest.iter().for_each(|item| {
-            body.push_str(&format!(
+        let format_item = |item: &DigestItem| {
+            format!(
                 "* {title} - {url}\n",
                 url = item.news_url,
                 title = item.news_title
-            ));
-        });
+            )
+        };
+
+        for item in digest {
+            body.push_str(format_item(item).as_str());
+        }
+
         body.push_str(format!("\nGenerated: {}", formatted_now()).as_str());
 
         println!("{body}");
@@ -132,16 +136,20 @@ impl DigestSender for TelegramSender {
         use teloxide::prelude::*;
 
         let bot = Bot::new(&self.config.token);
-
-        for item in digest {
-            let body = format!(
+        let format_item = |item: &DigestItem| {
+            format!(
                 "*[{}]({})*",
                 markdown::escape(&item.news_title),
                 markdown::escape_link_url(&item.news_url),
-            );
+            )
+        };
 
+        for news_item in digest {
             match bot
-                .send_message(self.config.chat_id.clone(), body)
+                .send_message(
+                    self.config.chat_id.clone(),
+                    format_item(news_item),
+                )
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)
                 .send()
                 .await
@@ -163,14 +171,17 @@ pub fn digest_to_html(digest: &[DigestItem]) -> String {
     let mut body = String::from(
         "<html><head>HackerNews Digest</head><body><p>Hi!</p><div><ul>",
     );
-
-    digest.iter().for_each(|item| {
-        body.push_str(&format!(
+    let format_item = |item: &DigestItem| {
+        format!(
             "<li><a href=\"{url}\">{title}</a></li>",
             url = item.news_url,
             title = item.news_title
-        ));
-    });
+        )
+    };
+
+    digest
+        .iter()
+        .for_each(|item| body.push_str(format_item(item).as_str()));
 
     body.push_str(
         format!(
@@ -185,13 +196,17 @@ pub fn digest_to_html(digest: &[DigestItem]) -> String {
 /// Convert a digest to a plain text string
 pub fn digest_to_text(digest: &[DigestItem]) -> String {
     let mut body = String::from("Hi!\n\n");
-    digest.iter().for_each(|item| {
-        body.push_str(&format!(
+    let format_item = |item: &DigestItem| {
+        format!(
             "* {title} - {url}\n",
             url = item.news_url,
             title = item.news_title
-        ));
-    });
+        )
+    };
+
+    digest
+        .iter()
+        .for_each(|item| body.push_str(format_item(item).as_str()));
 
     body.push_str(format!("\nGenerated: {}", formatted_now()).as_str());
     body
