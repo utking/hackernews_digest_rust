@@ -1,25 +1,25 @@
 [package]
 name = "hackernews-rust"
-version = "3.0.2"
+version = "3.0.3"
 edition = "2021"
-rust-version = "1.84.0"
+rust-version = "1.88.0"
 
 [dependencies]
 argparse = "=0.2.2"
-chrono = "0.4.39"
-diesel = { version = "2.2.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+chrono = "0.4"
+diesel = { version = "2.2.11", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 lettre = "~0.11"
 lettre_email = "0.9"
+libsqlite3-sys = { version = "0.33", features = ["bundled"] }
 regex = "1.11.1"
 reqwest = { version = "0.12", features = ["json"] }
+rss = "2.0"
 serde = {version = "~1.0", features = ["derive"]}
 serde_json = "~1.0"
+teloxide = { version = "0.16", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
-url = "2.5.4"
-libsqlite3-sys = { version = "~0.31", features = ["bundled"] }
-diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
-teloxide = { version = "0.13", features = ["macros"] }
-rss = "2.0.11"
+url = "2.5"
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"
