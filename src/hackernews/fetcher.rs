@@ -177,23 +177,23 @@ mod test {
 
     #[test]
     async fn test_is_empty_url() {
-        let pulled_items = vec![
+        let pulled_items = [
             DigestItem {
                 news_title: "Rust is awesome".to_string(),
                 news_url: "https://example.com".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 1,
             },
             DigestItem {
                 news_title: "Missing URL".to_string(),
-                news_url: "".to_string(),
-                created_at: 1700000000,
+                news_url: String::new(),
+                created_at: 1_700_000_000,
                 id: 2,
             },
             DigestItem {
-                news_title: "".to_string(),
-                news_url: "".to_string(),
-                created_at: 1700000000,
+                news_title: String::new(),
+                news_url: String::new(),
+                created_at: 1_700_000_000,
                 id: 3,
             },
         ];
@@ -210,17 +210,17 @@ mod test {
 
     #[test]
     async fn test_is_blacklisted() {
-        let pulled_items = vec![
+        let pulled_items = [
             DigestItem {
                 news_title: "Rust is awesome".to_string(),
                 news_url: "https://example.com".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 1,
             },
             DigestItem {
                 news_title: "Rust is awesome".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 2,
             },
         ];
@@ -335,7 +335,7 @@ mod test {
         // the item is with empty URL, so the title and the URL are reset to empty
         assert_eq!(digest_item.news_title, "-");
         assert_eq!(digest_item.news_url, "-");
-        assert_eq!(digest_item.created_at, 1736904177);
+        assert_eq!(digest_item.created_at, 1_736_904_177);
         assert_eq!(digest_item.id, 111);
     }
 
@@ -348,13 +348,13 @@ mod test {
             DigestItem {
                 news_title: "Rust is awesome".to_string(),
                 news_url: "https://example.com".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 1,
             },
             DigestItem {
                 news_title: "Rust is awesome".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 2,
             },
         ];
@@ -531,31 +531,31 @@ mod test {
             DigestItem {
                 news_title: "Rust is awesome".to_string(),
                 news_url: "https://example.com".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 1,
             },
             DigestItem {
                 news_title: "Rust is cool".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 2,
             },
             DigestItem {
                 news_title: "Rust is aweful".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 3,
             },
             DigestItem {
                 news_title: "Go is cool".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 4,
             },
             DigestItem {
                 news_title: "Dart is some thing".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 5,
             },
         ];
@@ -614,33 +614,33 @@ mod test {
                 news_title: "So You Want to Build Your Own Data Center"
                     .to_string(),
                 news_url: "https://example.com".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 1,
             },
             DigestItem {
                 news_title: "Maze Generation: Recursive Division (2011)"
                     .to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 2,
             },
             DigestItem {
                 news_title: "Swedish Exports of Ball Bearings".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 3,
             },
             DigestItem {
                 news_title: "Obelisks".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 4,
             },
             DigestItem {
                 news_title: "Bluesky accounts add 10k followers per day"
                     .to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 5,
             },
         ];
@@ -725,25 +725,25 @@ mod test {
             DigestItem {
                 news_title: "Item #1".to_string(),
                 news_url: "https://example.com".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 1,
             },
             DigestItem {
                 news_title: "Item #2".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 2,
             },
             DigestItem {
                 news_title: "Some other name for item #1".to_string(),
                 news_url: "https://example.com".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 3,
             },
             DigestItem {
                 news_title: "Item #2 duplicate".to_string(),
                 news_url: "https://example.org".to_string(),
-                created_at: 1700000000,
+                created_at: 1_700_000_000,
                 id: 4,
             },
         ];

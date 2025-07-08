@@ -1,2 +1,11 @@
 [resolver]
 incompatible-rust-versions = "fallback"
+
+[alias]
+secure-check = [
+    "clippy", "--all-targets", "--all-features", "--",
+    "-D", "clippy::unwrap_used",
+    "-D", "clippy::expect_used", 
+    "-D", "clippy::indexing_slicing",
+    "-D", "clippy::panic",
+]

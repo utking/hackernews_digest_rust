@@ -27,3 +27,7 @@ httpmock = "0.7.0-rc.1"
 [profile.release]
 opt-level = "z"
 strip = true
+overflow-checks = true     # Catch integer overflows
+debug-assertions = true    # Keep debug_assert! in release
+lto = true                # Link-time optimization
+codegen-units = 1         # Better optimization

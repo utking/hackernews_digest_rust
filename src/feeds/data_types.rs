@@ -24,7 +24,7 @@ impl FeedItem {
         let id = guid
             .trim_end_matches('/')
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or_default()
             .parse()
             .unwrap_or_default();

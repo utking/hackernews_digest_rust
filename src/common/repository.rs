@@ -1,6 +1,8 @@
 use crate::rss_items;
 use diesel::prelude::*;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{
+    embed_migrations, EmbeddedMigrations, MigrationHarness,
+};
 
 #[derive(Clone)]
 /// DB Model: A news item that has been fetched
@@ -38,22 +40,32 @@ impl Storage {
     }
 
     pub fn establish_connection(database_url: &str) -> SqliteConnection {
-        SqliteConnection::establish(database_url)
-            .unwrap_or_else(|e| panic!("Error connecting to {database_url} with {e}"))
+        SqliteConnection::establish(database_url).unwrap_or_else(|e| {
+            panic!("Error connecting to {database_url} with {e}")
+        })
     }
 
     /// Vacuum the database - remove news items which `created_at` is older than `expire_after_days`
-    pub fn vacuum(&mut self, expire_after_days: i64) -> Result<usize, diesel::result::Error> {
+    pub fn vacuum(
+        &mut self,
+        expire_after_days: i64,
+    ) -> Result<usize, diesel::result::Error> {
         use crate::schemas::prelude::rss_items::dsl::*;
 
-        let expire_after = chrono::Utc::now().timestamp() - expire_after_days * 24 * 60 * 60;
-        let num_deleted = diesel::delete(rss_items.filter(created_at.lt(expire_after)))
-            .execute(&mut self.conn)?;
+        let expire_after =
+            chrono::Utc::now().timestamp() - expire_after_days * 24 * 60 * 60;
+        let num_deleted =
+            diesel::delete(rss_items.filter(created_at.lt(expire_after)))
+                .execute(&mut self.conn)?;
         Ok(num_deleted)
     }
 
     /// Get IDs of the news items whose IDs are not in the database yet
-    pub fn get_ids_to_pull(&mut self, news_source: &str, prefetched_ids: Vec<i64>) -> Vec<i64> {
+    pub fn get_ids_to_pull(
+        &mut self,
+        news_source: &str,
+        prefetched_ids: Vec<i64>,
+    ) -> Vec<i64> {
         use crate::schemas::prelude::rss_items::dsl::{id, rss_items, source};
 
         let existing_ids: Vec<i64> = rss_items
@@ -71,7 +83,10 @@ impl Storage {
 
     /// Store the news items in the database. It's the same feed generally,
     /// so we just give it a source
-    pub fn store_news_items(&mut self, digest: &[DigestItem]) -> Result<(), diesel::result::Error> {
+    pub fn store_news_items(
+        &mut self,
+        digest: &[DigestItem],
+    ) -> Result<(), diesel::result::Error> {
         self.store_feed_items("hackernews", digest)
     }
 
@@ -101,7 +116,9 @@ impl Storage {
         Ok(())
     }
 
-    fn run_migrations(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    fn run_migrations(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!();
         self.conn.run_pending_migrations(SQLITE_MIGRATIONS)?;
 
