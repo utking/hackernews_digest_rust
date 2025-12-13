@@ -21,13 +21,6 @@ struct FeedItem {
     pub created_at: i64,
 }
 
-#[allow(dead_code)]
-#[derive(Clone, PartialEq, Selectable)]
-#[diesel(table_name = rss_items)]
-pub struct DigestItemID {
-    pub id: i64,
-}
-
 pub struct Storage {
     conn: SqliteConnection,
 }
