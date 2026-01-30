@@ -1,19 +1,19 @@
 [package]
 name = "hackernews-rust"
-version = "3.0.4"
+version = "3.0.5"
 edition = "2021"
 rust-version = "1.92.0"
 
 [dependencies]
 argparse = "=0.2.2"
 chrono = "0.4"
-diesel = { version = "2.2.11", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
-diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
+diesel = { version = "2.3", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+diesel_migrations = { version = "2.3", features = ["sqlite"] }
 lettre = "~0.11"
 lettre_email = "0.9"
-libsqlite3-sys = { version = "0.33", features = ["bundled"] }
-regex = "1.11.1"
-reqwest = { version = "0.12", features = ["json"] }
+libsqlite3-sys = { version = "0.35", features = ["bundled"] }
+regex = "1.12"
+reqwest = { version = "0.13", features = ["json"] }
 rss = "2.0"
 serde = {version = "~1.0", features = ["derive"]}
 serde_json = "~1.0"
